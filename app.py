@@ -32,7 +32,7 @@ def inject_page_css():
             /* 1. Reset Main Container */
             .block-container {
                 padding-top: 1rem !important;
-                padding-bottom: 5rem !important; /* Make room for the dock */
+                padding-bottom: 5rem !important;
                 padding-left: 0.5rem !important;
                 padding-right: 0.5rem !important;
                 max-width: 100% !important;
@@ -42,21 +42,19 @@ def inject_page_css():
             header, footer, [data-testid="stSidebar"] {display: none !important;}
             
             /* 3. THE BOTTOM DOCK BAR */
-            /* We target the specific horizontal block at the bottom of the script */
             [data-testid="stHorizontalBlock"]:last-of-type {
                 position: fixed;
                 bottom: 0;
                 left: 0;
                 width: 100%;
-                background-color: #1a1b21; /* Darker distinct background */
+                background-color: #1a1b21;
                 border-top: 1px solid #333;
                 padding: 10px 20px;
                 z-index: 1000;
-                gap: 10px; /* Spacing between buttons */
+                gap: 10px;
             }
             
             /* 4. Dock Buttons Styling */
-            /* Target buttons specifically inside the dock to make them tall and bold */
             [data-testid="stHorizontalBlock"]:last-of-type button {
                 height: 3rem;
                 border: 1px solid #444;
@@ -77,17 +75,6 @@ def inject_page_css():
                 overflow: hidden !important;
                 text-overflow: clip !important;
                 font-size: 0.85rem !important;
-            }
-            
-            /* 6. Team Manager List Styling */
-            .team-row {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: 8px;
-                background-color: #262730;
-                margin-bottom: 5px;
-                border-radius: 5px;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -165,30 +152,32 @@ def add_event_dialog(team_list, schedule_data, schedule_sha):
 # --- DIALOG: Manage Team ---
 @st.dialog("👥 Team Management")
 def manage_team_dialog(current_team, team_sha):
-    # 1. Quick Add at Top
-    c_in, c_btn = st.columns([3, 1])
-    new_name = c_in.text_input("New Member", label_visibility="collapsed", placeholder="Enter name...")
-    if c_btn.button("Add", use_container_width=True):
+    # 1. Quick Add at Top (Using vertical_alignment to line up the button)
+    c_in, c_btn = st.columns([3, 1], vertical_alignment="bottom")
+    new_name = c_in.text_input("Add New Member", placeholder="Enter name...")
+    
+    if c_btn.button("Add", key="add_new_member_btn", use_container_width=True):
         if new_name and new_name not in current_team:
             current_team.append(new_name)
             current_team.sort()
             save_data(TEAM_FILE, current_team, team_sha)
             st.rerun()
     
-    st.divider()
+    st.write("---")
+    st.caption(f"Current Team List ({len(current_team)})")
     
-    # 2. Clean List of Members with Delete Buttons
-    st.caption(f"Current Team ({len(current_team)})")
-    
-    # Scrollable container for the list
-    with st.container(height=300):
-        for member in current_team:
-            # Create a "Row" layout
-            col_txt, col_del = st.columns([4, 1])
-            col_txt.markdown(f"<div style='padding-top: 10px; font-size:16px;'>👤 <b>{member}</b></div>", unsafe_allow_html=True)
+    # 2. Simple Scrollable List
+    with st.container(height=400):
+        if not current_team:
+            st.info("No team members found.")
+        
+        for i, member in enumerate(current_team):
+            # Standard Streamlit columns - Robust and reliable
+            c_name, c_del = st.columns([5, 1])
+            c_name.write(f"👤 **{member}**")
             
-            # The trash button
-            if col_del.button("🗑️", key=f"del_{member}", help=f"Remove {member}"):
+            # Using index 'i' in key ensures uniqueness
+            if c_del.button("🗑️", key=f"del_btn_{i}", help=f"Remove {member}"):
                 current_team.remove(member)
                 save_data(TEAM_FILE, current_team, team_sha)
                 st.rerun()
@@ -214,7 +203,7 @@ calendar_options = {
     "initialView": "dayGridMonth",
     "selectable": True,
     "editable": False,
-    "height": "80vh", # Leaves just enough room for the dock
+    "height": "80vh",
     "expandRows": True,
     "handleWindowResize": True,
 }
@@ -222,7 +211,6 @@ calendar_options = {
 calendar(events=schedule_data, options=calendar_options)
 
 # --- THE BOTTOM DOCK ---
-# This specific horizontal block is targeted by the CSS above to stick to the bottom
 dock_col1, dock_col2, dock_col3 = st.columns(3)
 
 if dock_col1.button("➕ Add Item", use_container_width=True):
