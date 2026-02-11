@@ -1,16 +1,17 @@
 import streamlit as st
 from streamlit_calendar import calendar
-from github import Github
+from github import Github, Auth # Updated Import
 import json
 from datetime import datetime, timedelta
 
 # --- Configuration ---
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 REPO_NAME = "controlswmi-pixel/Controls-Calendar"
-FILE_PATH = "schedule.json"
+SCHEDULE_FILE = "schedule.json"
+TEAM_FILE = "team.json"
 
-# --- Team Members ---
-TEAM_MEMBERS = [
+# --- Default Team (Used if team.json doesn't exist yet) ---
+DEFAULT_TEAM = [
     "Carson", "Dave Miller", "Andrew Roberts", "Christopher Smith",
     "Eric Zelt", "Kent Bearman", "Larry Ley", "Moses Ward", "Scott McNamara"
 ]
@@ -41,14 +42,13 @@ def inject_page_css():
             header {visibility: hidden;}
             footer {visibility: hidden;}
             
-            /* 3. Sidebar Styling */
+            /* 3. Sidebar Styling - Removed the white background color */
             [data-testid="stSidebar"] {
                 min-width: 350px;
                 max-width: 350px;
-                background-color: #f8f9fa; /* Light contrast */
             }
             
-            /* 4. Calendar Text Wrapping (Fixes the "..." issue) */
+            /* 4. Calendar Text Wrapping */
             .fc-event-title {
                 white-space: normal !important;
                 overflow: hidden !important;
@@ -71,55 +71,58 @@ def inject_page_css():
         </style>
     """, unsafe_allow_html=True)
 
-def load_data_from_github():
+# --- GitHub Helper Functions ---
+def get_github_client():
+    auth = Auth.Token(GITHUB_TOKEN) # Fixes the DeprecationWarning
+    return Github(auth=auth)
+
+def load_data(filename):
+    """Generic function to load JSON from GitHub"""
     try:
-        g = Github(GITHUB_TOKEN)
+        g = get_github_client()
         repo = g.get_repo(REPO_NAME)
-        contents = repo.get_contents(FILE_PATH)
+        contents = repo.get_contents(filename)
         return json.loads(contents.decoded_content.decode()), contents.sha
-    except Exception as e:
-        return [], None
+    except Exception:
+        return None, None
 
-def save_data_to_github(new_data, sha):
-    g = Github(GITHUB_TOKEN)
+def save_data(filename, new_data, sha=None):
+    """Generic function to save JSON to GitHub"""
+    g = get_github_client()
     repo = g.get_repo(REPO_NAME)
-    contents = repo.get_contents(FILE_PATH)
-    repo.update_file(path=FILE_PATH, message="Update schedule", content=json.dumps(new_data, indent=4), sha=contents.sha)
-
-def check_conflicts(new_event, current_schedule):
-    new_start = datetime.strptime(new_event['start'], "%Y-%m-%d")
-    new_end = datetime.strptime(new_event['end'], "%Y-%m-%d")
-    conflicts = []
-    for event in current_schedule:
-        if event['resourceId'] == new_event['resourceId']:
-            existing_start = datetime.strptime(event['start'], "%Y-%m-%d")
-            existing_end = datetime.strptime(event['end'], "%Y-%m-%d")
-            if new_start < existing_end and new_end > existing_start:
-                conflicts.append(f"Conflict: {event['title']}")
-    return conflicts
+    
+    if sha:
+        repo.update_file(path=filename, message=f"Update {filename}", content=json.dumps(new_data, indent=4), sha=sha)
+    else:
+        # Create file if it doesn't exist
+        repo.create_file(path=filename, message=f"Create {filename}", content=json.dumps(new_data, indent=4))
 
 # --- Main Application ---
 st.set_page_config(page_title="Controls Schedule", layout="wide")
 inject_page_css()
 
-# Load Data
-schedule_data, file_sha = load_data_from_github()
+# 1. Load Team Data
+team_data, team_sha = load_data(TEAM_FILE)
+if not team_data:
+    team_data = DEFAULT_TEAM # Fallback to default if file missing
+
+# 2. Load Schedule Data
+schedule_data, schedule_sha = load_data(SCHEDULE_FILE)
+if not schedule_data:
+    schedule_data = []
 
 # --- Sidebar ---
 with st.sidebar:
     st.markdown("### 📅 Team Scheduler")
-    st.markdown("---")
     
+    # --- ADD EVENT SECTION ---
     with st.form("add_event_form", clear_on_submit=True):
-        st.markdown("**1. Project Details**")
+        st.caption("New Schedule Entry")
         title = st.text_input("Description", placeholder="e.g. Line 4 Commissioning")
         
         c_assign, c_type = st.columns([1.5, 1])
-        assignee = c_assign.selectbox("Assignee", TEAM_MEMBERS)
+        assignee = c_assign.selectbox("Assignee", team_data)
         category = c_type.selectbox("Type", list(CATEGORY_COLORS.keys()))
-        
-        st.markdown("---")
-        st.markdown("**2. Duration**")
         
         c_start, c_end = st.columns(2)
         start_date = c_start.date_input("Start", value="today")
@@ -143,14 +146,53 @@ with st.sidebar:
                     "extendedProps": {"category": category, "assignee": assignee}
                 }
                 
-                conflicts = check_conflicts(new_event, schedule_data)
-                if conflicts:
-                    st.error(f"Conflict detected for {assignee}!")
-                else:
+                # Basic Conflict Check
+                conflict = False
+                for event in schedule_data:
+                    if event['resourceId'] == assignee:
+                        ex_start = datetime.strptime(event['start'], "%Y-%m-%d")
+                        ex_end = datetime.strptime(event['end'], "%Y-%m-%d")
+                        new_s = datetime.strptime(str(start_date), "%Y-%m-%d")
+                        new_e = datetime.strptime(str(adjusted_end), "%Y-%m-%d")
+                        if new_s < ex_end and new_e > ex_start:
+                            conflict = True
+                            st.error(f"Conflict: {event['title']}")
+                            break
+                
+                if not conflict:
                     schedule_data.append(new_event)
-                    save_data_to_github(schedule_data, file_sha)
+                    save_data(SCHEDULE_FILE, schedule_data, schedule_sha)
                     st.success("Added!")
                     st.rerun()
+
+    st.write("---")
+
+    # --- TEAM MANAGEMENT SECTION ---
+    with st.expander("⚙️ Manage Team Members"):
+        st.caption("Add or Remove team members here.")
+        
+        # Add Member
+        new_member = st.text_input("New Member Name")
+        if st.button("Add Member"):
+            if new_member and new_member not in team_data:
+                team_data.append(new_member)
+                team_data.sort() # Keep alphabetical
+                save_data(TEAM_FILE, team_data, team_sha)
+                st.success(f"Added {new_member}")
+                st.rerun()
+            elif new_member in team_data:
+                st.warning("Member already exists.")
+        
+        st.write("")
+        
+        # Remove Member
+        member_to_remove = st.selectbox("Remove Member", ["Select..."] + team_data)
+        if st.button("Remove Selected"):
+            if member_to_remove != "Select...":
+                team_data.remove(member_to_remove)
+                save_data(TEAM_FILE, team_data, team_sha)
+                st.success(f"Removed {member_to_remove}")
+                st.rerun()
 
 # --- Calendar View ---
 calendar_options = {
@@ -163,10 +205,8 @@ calendar_options = {
     "selectable": True,
     "editable": False,
     "navLinks": True,
-    
-    # FIX: Robust Height Setting
-    "height": "750px",       # Fixed pixel height guarantees it won't disappear
-    "expandRows": True,      # Stretches rows to fill that 750px
+    "height": "750px", 
+    "expandRows": True,
     "handleWindowResize": True,
 }
 
