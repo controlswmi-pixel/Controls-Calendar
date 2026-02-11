@@ -1,1 +1,465 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controls Team Scheduler v2.0</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    <script type="module">
+        import { Octokit } from "https://cdn.skypack.dev/@octokit/rest";
+        window.Octokit = Octokit;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
+    <style>
+        body { background-color: #0e1117; color: white; padding-bottom: 80px; overflow: hidden; }
+        
+        /* Calendar Styling */
+        .fc { height: 85vh; margin: 20px; }
+        .fc-toolbar-title { font-size: 1.5rem !important; }
+        .fc-event { cursor: pointer; border: none; }
+        .fc-daygrid-event { white-space: normal !important; } /* Wrap text */
+        
+        /* Bottom Dock */
+        .bottom-dock {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background-color: #1a1b21; border-top: 1px solid #333;
+            padding: 15px; display: flex; gap: 10px; justify-content: center;
+            z-index: 1000;
+        }
+        .dock-btn {
+            background-color: #262730; border: 1px solid #444; color: white;
+            font-weight: 600; padding: 10px 15px; border-radius: 8px; width: 140px;
+        }
+        .dock-btn:hover { background-color: #0078D4; border-color: #0078D4; }
+
+        /* Login Overlay */
+        #login-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0e1117; z-index: 2000; display: flex;
+            align-items: center; justify-content: center;
+        }
+        .login-box {
+            background: #1a1b21; padding: 30px; border-radius: 10px;
+            border: 1px solid #333; width: 400px;
+        }
+
+        /* Scrollable Lists */
+        .scrollable-list { max-height: 300px; overflow-y: auto; }
+        .scrollable-list::-webkit-scrollbar { width: 8px; }
+        .scrollable-list::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        
+        /* Dropdown Checkboxes */
+        .dropdown-item-checkbox { padding: 8px 15px; cursor: pointer; display: block; }
+        .dropdown-item-checkbox:hover { background-color: #333; }
+        
+        /* Color Swatch */
+        .color-swatch { display: inline-block; width: 15px; height: 15px; border-radius: 3px; margin-right: 8px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-overlay">
+        <div class="login-box">
+            <h3>🔒 Team Login</h3>
+            <p class="text-muted">Enter your Team GitHub Token to access the schedule.</p>
+            <input type="password" id="api-token" class="form-control mb-3" placeholder="ghp_...">
+            <button onclick="login()" class="btn btn-primary w-100">Access Schedule</button>
+        </div>
+    </div>
+
+    <div id="app-container" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center px-4 pt-2">
+            <h5 class="text-muted">Controls & Automation Scheduler <span class="badge bg-primary" style="font-size: 0.6em;">v2.0</span></h5>
+        </div>
+
+        <div id="calendar"></div>
+        
+        <div class="bottom-dock">
+            <button class="dock-btn" onclick="openAddEventModal()">➕ Add Item</button>
+            <button class="dock-btn" onclick="openTeamManager()">👥 Team</button>
+            <button class="dock-btn" onclick="openTypeManager()">🎨 Types</button>
+            <button class="dock-btn" onclick="location.reload()">🔄 Refresh</button>
+        </div>
+    </div>
+
+    <div class="modal fade" id="addEventModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">New Schedule Item</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" id="evt-title" class="form-control mb-3 bg-dark text-white" placeholder="Project / Description">
+                    
+                    <div class="row g-2 mb-3">
+                        <div class="col-7">
+                            <label class="small text-muted">Assign Members (Multi-Select)</label>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-white bg-dark" type="button" id="multiSelectBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                                    Select Members...
+                                </button>
+                                <ul class="dropdown-menu w-100 bg-dark border-secondary scrollable-list" id="member-checkbox-list">
+                                    </ul>
+                            </div>
+                        </div>
+                        <div class="col-5">
+                            <label class="small text-muted">Activity Type</label>
+                            <select id="evt-type" class="form-select bg-dark text-white">
+                                </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="small text-muted">Start Date</label>
+                            <input type="date" id="evt-start" class="form-control bg-dark text-white">
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted">End Date</label>
+                            <input type="date" id="evt-end" class="form-control bg-dark text-white">
+                        </div>
+                    </div>
+                    <button onclick="saveEvent()" class="btn btn-primary w-100">Save Item</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="teamModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">Manage Team</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group mb-3">
+                        <input type="text" id="new-member-name" class="form-control bg-dark text-white" placeholder="New Member Name">
+                        <button onclick="addMember()" class="btn btn-success">Add</button>
+                    </div>
+                    <p class="text-muted small">Current Team Members:</p>
+                    <ul id="team-list" class="list-group list-group-flush scrollable-list"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="typeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">Manage Activity Types</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group mb-3">
+                        <input type="text" id="new-type-name" class="form-control bg-dark text-white" placeholder="Type Name (e.g. Training)">
+                        <input type="color" id="new-type-color" class="form-control form-control-color bg-dark border-secondary" value="#0d6efd" title="Choose color">
+                        <button onclick="addType()" class="btn btn-success">Add</button>
+                    </div>
+                    <p class="text-muted small">Current Activities:</p>
+                    <ul id="type-list" class="list-group list-group-flush scrollable-list"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIG ---
+        const REPO_OWNER = "controlswmi-pixel"; 
+        const REPO_NAME = "Controls-Calendar"; 
+        const SCHEDULE_FILE = "schedule.json";
+        const TEAM_FILE = "team.json";
+        const TYPES_FILE = "types.json"; // New file for activity types
+        
+        // --- DEFAULT DATA ---
+        const DEFAULT_TYPES = [
+            { name: "Panel Build", color: "#0078D4" },
+            { name: "Vacation", color: "#107C10" },
+            { name: "On-Site Startup", color: "#D13438" },
+            { name: "Office Day", color: "#FF8C00" },
+            { name: "Maintenance", color: "#881798" }
+        ];
+
+        // --- STATE ---
+        let octokit = null;
+        let calendar = null;
+        let scheduleData = [];
+        let scheduleSha = null;
+        let teamData = [];
+        let teamSha = null;
+        let typeData = [];
+        let typeSha = null;
+
+        // --- AUTH ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const storedToken = localStorage.getItem('gh_token');
+            if (storedToken) {
+                document.getElementById('api-token').value = storedToken;
+                login();
+            }
+            // Set default dates
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('evt-start').value = today;
+            document.getElementById('evt-end').value = today;
+        });
+
+        async function login() {
+            const token = document.getElementById('api-token').value.trim();
+            if (!token) return alert("Please enter a token");
+            
+            try {
+                const { Octokit } = window;
+                octokit = new Octokit({ auth: token });
+                const user = await octokit.request('GET /user');
+                console.log("Logged in as:", user.data.login);
+                
+                localStorage.setItem('gh_token', token);
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('app-container').style.display = 'block';
+                
+                initApp();
+            } catch (e) {
+                alert("Invalid Token or Connection Error: " + e.message);
+                localStorage.removeItem('gh_token');
+            }
+        }
+
+        async function initApp() {
+            // Load everything in parallel
+            await Promise.all([loadTeam(), loadTypes(), loadSchedule()]);
+            initCalendar();
+        }
+
+        // --- GITHUB API HELPERS ---
+        async function getFile(filename) {
+            try {
+                const timestamp = new Date().getTime(); // Prevent caching
+                const response = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}?t=${timestamp}`, {
+                    owner: REPO_OWNER, repo: REPO_NAME, path: filename
+                });
+                return {
+                    content: JSON.parse(atob(response.data.content)),
+                    sha: response.data.sha
+                };
+            } catch (e) {
+                return { content: null, sha: null };
+            }
+        }
+
+        async function saveFile(filename, content, sha) {
+            try {
+                const response = await octokit.request(`PUT /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, {
+                    owner: REPO_OWNER, repo: REPO_NAME, path: filename,
+                    message: "Update via Web App",
+                    content: btoa(JSON.stringify(content, null, 2)),
+                    sha: sha
+                });
+                return response.data.content.sha;
+            } catch (e) {
+                alert("Error saving: " + e.message);
+                throw e;
+            }
+        }
+
+        // --- DATA LOADING ---
+        async function loadTeam() {
+            const data = await getFile(TEAM_FILE);
+            teamData = data.content || ["Carson", "Dave Miller"];
+            teamSha = data.sha;
+        }
+
+        async function loadTypes() {
+            const data = await getFile(TYPES_FILE);
+            typeData = data.content || DEFAULT_TYPES;
+            typeSha = data.sha;
+        }
+
+        async function loadSchedule() {
+            const data = await getFile(SCHEDULE_FILE);
+            scheduleData = data.content || [];
+            scheduleSha = data.sha;
+        }
+
+        // --- CALENDAR ---
+        function initCalendar() {
+            const calendarEl = document.getElementById('calendar');
+            calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listMonth' },
+                events: scheduleData,
+                height: '80vh',
+                themeSystem: 'bootstrap5'
+            });
+            calendar.render();
+        }
+
+        // --- ADD EVENT & MULTI-SELECT ---
+        function openAddEventModal() {
+            // 1. Populate Member Checkboxes
+            const list = document.getElementById('member-checkbox-list');
+            list.innerHTML = "";
+            teamData.forEach(member => {
+                const li = document.createElement("li");
+                li.innerHTML = `
+                    <label class="dropdown-item-checkbox text-white">
+                        <input type="checkbox" class="form-check-input me-2 member-check" value="${member}">
+                        ${member}
+                    </label>`;
+                list.appendChild(li);
+            });
+            updateSelectedCount(); // Reset text
+
+            // Add Listeners
+            document.querySelectorAll('.member-check').forEach(box => {
+                box.addEventListener('change', updateSelectedCount);
+            });
+
+            // 2. Populate Types
+            const typeSelect = document.getElementById('evt-type');
+            typeSelect.innerHTML = "";
+            typeData.forEach(type => {
+                const opt = document.createElement("option");
+                opt.value = type.color; 
+                opt.innerText = type.name;
+                opt.setAttribute('data-name', type.name);
+                typeSelect.appendChild(opt);
+            });
+
+            new bootstrap.Modal(document.getElementById('addEventModal')).show();
+        }
+
+        function updateSelectedCount() {
+            const checked = document.querySelectorAll('.member-check:checked');
+            const btn = document.getElementById('multiSelectBtn');
+            if (checked.length === 0) btn.innerText = "Select Members...";
+            else if (checked.length === 1) btn.innerText = checked[0].value;
+            else btn.innerText = `${checked.length} Members Selected`;
+        }
+
+        async function saveEvent() {
+            const title = document.getElementById('evt-title').value;
+            const typeSelect = document.getElementById('evt-type');
+            const color = typeSelect.value;
+            const typeName = typeSelect.options[typeSelect.selectedIndex].getAttribute('data-name');
+            const start = document.getElementById('evt-start').value;
+            let end = document.getElementById('evt-end').value;
+
+            // Get Checkboxes
+            const checkboxes = document.querySelectorAll('.member-check:checked');
+            const selectedMembers = Array.from(checkboxes).map(cb => cb.value);
+
+            if (!title || !start || !end || selectedMembers.length === 0) {
+                return alert("Please fill title, dates, and select at least one member.");
+            }
+            
+            // Fix Date (Exclusive End)
+            let endDateObj = new Date(end);
+            endDateObj.setDate(endDateObj.getDate() + 1);
+            const adjEnd = endDateObj.toISOString().split('T')[0];
+
+            // Create 1 Event Per Person
+            const newEvents = [];
+            selectedMembers.forEach(member => {
+                newEvents.push({
+                    title: `${member}: ${title}`, 
+                    start: start,
+                    end: adjEnd,
+                    backgroundColor: color,
+                    borderColor: color,
+                    resourceId: member,
+                    extendedProps: { type: typeName }
+                });
+            });
+
+            // UI Update
+            newEvents.forEach(ev => calendar.addEvent(ev));
+            bootstrap.Modal.getInstance(document.getElementById('addEventModal')).hide();
+
+            // Save
+            scheduleData.push(...newEvents);
+            scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
+        }
+
+        // --- TEAM MANAGER ---
+        function openTeamManager() {
+            renderTeamList();
+            new bootstrap.Modal(document.getElementById('teamModal')).show();
+        }
+
+        function renderTeamList() {
+            const list = document.getElementById('team-list');
+            list.innerHTML = "";
+            teamData.forEach((member, index) => {
+                const li = document.createElement("li");
+                li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
+                li.innerHTML = `<span>👤 ${member}</span> <button class="btn btn-sm btn-outline-danger" onclick="removeMember(${index})">🗑️</button>`;
+                list.appendChild(li);
+            });
+        }
+
+        async function addMember() {
+            const name = document.getElementById('new-member-name').value.trim();
+            if (name && !teamData.includes(name)) {
+                teamData.push(name); teamData.sort();
+                renderTeamList();
+                document.getElementById('new-member-name').value = "";
+                teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
+            }
+        }
+
+        async function removeMember(index) {
+            if(confirm(`Remove ${teamData[index]}?`)) {
+                teamData.splice(index, 1); renderTeamList();
+                teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
+            }
+        }
+
+        // --- TYPE MANAGER ---
+        function openTypeManager() {
+            renderTypeList();
+            new bootstrap.Modal(document.getElementById('typeModal')).show();
+        }
+
+        function renderTypeList() {
+            const list = document.getElementById('type-list');
+            list.innerHTML = "";
+            typeData.forEach((type, index) => {
+                const li = document.createElement("li");
+                li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
+                li.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <span class="color-swatch" style="background-color:${type.color};"></span>
+                        <span>${type.name}</span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeType(${index})">🗑️</button>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        async function addType() {
+            const name = document.getElementById('new-type-name').value.trim();
+            const color = document.getElementById('new-type-color').value;
+            
+            if (name && !typeData.some(t => t.name === name)) {
+                typeData.push({ name: name, color: color });
+                renderTypeList();
+                document.getElementById('new-type-name').value = "";
+                typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
+            }
+        }
+
+        async function removeType(index) {
+            if(confirm(`Delete activity type "${typeData[index].name}"?`)) {
+                typeData.splice(index, 1); renderTypeList();
+                typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
+            }
+        }
+    </script>
+</body>
+</html>
