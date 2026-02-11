@@ -4,10 +4,10 @@
     "title": "Taylor Farm",
     "start": "2026-02-22",
     "end": "2026-02-25",
-    "backgroundColor": "#107C10",
-    "borderColor": "#107C10",
+    "backgroundColor": "#D13438",
+    "borderColor": "#D13438",
     "extendedProps": {
-      "type": "Vacation",
+      "type": "On-Site Startup",
       "members": [
         "Andrew Roberts",
         "Christopher Smith",
