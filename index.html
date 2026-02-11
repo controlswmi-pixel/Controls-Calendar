@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler v5.2</title>
+    <title>Controls Team Scheduler v5.3</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -26,11 +26,9 @@
         .fc a { text-decoration: none !important; color: inherit !important; }
         .fc-col-header-cell-cushion { color: white !important; } 
         .fc-daygrid-day-number { color: rgba(255, 255, 255, 0.75) !important; padding: 4px 8px !important; }
-        
         .fc-list-day-cushion { background-color: #262730 !important; }
         .fc-list-day-text, .fc-list-day-side-text { color: white !important; }
         .fc-list-event:hover td { background-color: #2b2d35 !important; }
-        
         .fc-event { cursor: pointer; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .fc-event:hover { filter: brightness(1.1); }
         .fc-event-main { padding: 4px; }
@@ -41,6 +39,33 @@
         .modal-dialog { max-width: 900px !important; }
         .modal-sm { max-width: 400px !important; }
         
+        /* --- CUSTOM TIME PICKER --- */
+        .time-picker-dropdown {
+            position: absolute;
+            width: 100%;
+            max-height: 250px;
+            overflow-y: auto;
+            background: #212529;
+            border: 1px solid #495057;
+            border-radius: 0.375rem;
+            z-index: 1055;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .time-option {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #343a40;
+            transition: background 0.1s;
+        }
+        .time-option:hover { background-color: #343a40; }
+        .time-option.selected { background-color: #0d6efd; color: white; }
+        .time-option.in-range { background-color: rgba(13, 110, 253, 0.3); } /* Light blue highlight */
+
+        /* Scrollbar for time picker */
+        .time-picker-dropdown::-webkit-scrollbar { width: 8px; }
+        .time-picker-dropdown::-webkit-scrollbar-thumb { background: #6c757d; border-radius: 4px; }
+
         /* Bottom Dock */
         .bottom-dock {
             position: fixed; bottom: 0; left: 0; width: 100%;
@@ -69,13 +94,10 @@
         .scrollable-list { max-height: 400px; overflow-y: auto; }
         .scrollable-list::-webkit-scrollbar { width: 8px; }
         .scrollable-list::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
-        
         .dropdown-item-checkbox { padding: 12px 15px; cursor: pointer; display: block; font-size: 1.1em; }
         .dropdown-item-checkbox:hover { background-color: #333; }
-        
         .color-swatch { display: inline-block; width: 20px; height: 20px; border-radius: 4px; margin-right: 12px; }
         .btn-icon { padding: 4px 8px; margin-left: 5px; }
-
         #loading-spinner { display: none; margin-left: 10px; }
     </style>
 </head>
@@ -94,7 +116,7 @@
         <div class="d-flex justify-content-between align-items-center px-4 pt-2">
             <h5 class="text-muted">
                 Controls & Automation Scheduler 
-                <span class="badge bg-success" style="font-size: 0.6em;">v5.2</span>
+                <span class="badge bg-success" style="font-size: 0.6em;">v5.3</span>
                 <span id="loading-spinner" class="spinner-border spinner-border-sm text-primary" role="status"></span>
             </h5>
         </div>
@@ -168,15 +190,12 @@
                     <label class="small text-muted mb-1">Date Range</label>
                     <input type="text" id="date-range-picker" class="form-control mb-3 bg-dark text-white p-2" placeholder="Select dates...">
 
-                    <div id="time-inputs-container" class="row g-3 mb-4" style="display:none;">
-                        <div class="col-6">
-                            <label class="small text-muted mb-1">Start Time</label>
-                            <input type="text" id="start-time-picker" class="form-control bg-dark text-white p-2 text-center" placeholder="8:00 AM">
-                        </div>
-                        <div class="col-6">
-                            <label class="small text-muted mb-1">End Time</label>
-                            <input type="text" id="end-time-picker" class="form-control bg-dark text-white p-2 text-center" placeholder="5:00 PM">
-                        </div>
+                    <div id="time-inputs-container" class="mb-4" style="display:none; position: relative;">
+                        <label class="small text-muted mb-1">Time Range</label>
+                        <input type="text" id="time-range-display" class="form-control bg-dark text-white p-2 text-center" placeholder="Select time..." readonly style="cursor: pointer;">
+                        
+                        <div id="custom-time-dropdown" class="time-picker-dropdown">
+                            </div>
                     </div>
 
                     <div class="d-flex gap-2 mt-2">
@@ -295,14 +314,17 @@
         let octokit = null;
         let calendar = null;
         let fpDate = null;
-        let fpStartTime = null;
-        let fpEndTime = null;
         let scheduleData = []; let scheduleSha = null;
         let teamData = []; let teamSha = null;
         let typeData = []; let typeSha = null;
         let editingTeamIndex = -1; let editingTypeIndex = -1;
         let pendingSaveData = null; 
         let activeFilters = []; 
+
+        // Time Picker State
+        let timeOptions = [];
+        let rangeStartIndex = -1;
+        let rangeEndIndex = -1;
 
         // --- AUTH ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -320,36 +342,116 @@
                 minDate: "today"
             });
 
-            // Init Flatpickr: Start Time (12hr, 15min steps)
-            fpStartTime = flatpickr("#start-time-picker", {
-                enableTime: true,
-                noCalendar: true,
-                dateFormat: "h:i K",
-                time_24hr: false,
-                minuteIncrement: 15,
-                defaultDate: "08:00"
+            generateTimeOptions();
+            setupTimePickerEvents();
+        });
+
+        // --- CUSTOM TIME PICKER LOGIC ---
+        function generateTimeOptions() {
+            const dropdown = document.getElementById('custom-time-dropdown');
+            dropdown.innerHTML = "";
+            timeOptions = [];
+            
+            // Generate 15 min intervals
+            for (let h = 0; h < 24; h++) {
+                for (let m = 0; m < 60; m += 15) {
+                    const ampm = h >= 12 ? 'PM' : 'AM';
+                    const h12 = h % 12 || 12;
+                    const mStr = m.toString().padStart(2, '0');
+                    const timeStr = `${h12}:${mStr} ${ampm}`;
+                    const val = h * 60 + m; // Minutes from midnight
+                    
+                    timeOptions.push({ text: timeStr, value: val });
+                    
+                    const div = document.createElement('div');
+                    div.className = 'time-option';
+                    div.innerText = timeStr;
+                    div.dataset.index = timeOptions.length - 1;
+                    div.onclick = (e) => handleTimeOptionClick(parseInt(e.target.dataset.index));
+                    div.onmouseover = (e) => handleTimeOptionHover(parseInt(e.target.dataset.index));
+                    dropdown.appendChild(div);
+                }
+            }
+        }
+
+        function setupTimePickerEvents() {
+            const display = document.getElementById('time-range-display');
+            const dropdown = document.getElementById('custom-time-dropdown');
+            
+            display.addEventListener('click', () => {
+                dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+                // Scroll to 8:00 AM (approx index 32)
+                if(dropdown.style.display === 'block') {
+                    const target = dropdown.children[32]; 
+                    if(target) target.scrollIntoView({ block: "center" });
+                }
             });
 
-            // Init Flatpickr: End Time (12hr, 15min steps)
-            fpEndTime = flatpickr("#end-time-picker", {
-                enableTime: true,
-                noCalendar: true,
-                dateFormat: "h:i K",
-                time_24hr: false,
-                minuteIncrement: 15,
-                defaultDate: "17:00"
+            // Close on outside click is handled by modal backdrop mostly, but extra safety:
+            document.addEventListener('click', (e) => {
+                if (!display.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
             });
-        });
+        }
+
+        function handleTimeOptionClick(index) {
+            const options = document.querySelectorAll('.time-option');
+            
+            if (rangeStartIndex === -1 || (rangeStartIndex !== -1 && rangeEndIndex !== -1)) {
+                // First click or Reset
+                rangeStartIndex = index;
+                rangeEndIndex = -1;
+                resetTimeStyles();
+                options[index].classList.add('selected');
+            } else {
+                // Second click (End time)
+                if (index < rangeStartIndex) {
+                    // User clicked earlier time, swap or reset? Let's just make it new start.
+                    rangeStartIndex = index;
+                    resetTimeStyles();
+                    options[index].classList.add('selected');
+                } else {
+                    rangeEndIndex = index;
+                    options[index].classList.add('selected');
+                    updateTimeDisplay();
+                    document.getElementById('custom-time-dropdown').style.display = 'none';
+                }
+            }
+        }
+
+        function handleTimeOptionHover(index) {
+            if (rangeStartIndex !== -1 && rangeEndIndex === -1) {
+                const options = document.querySelectorAll('.time-option');
+                options.forEach((opt, i) => {
+                    if (i > rangeStartIndex && i <= index) {
+                        opt.classList.add('in-range');
+                    } else {
+                        opt.classList.remove('in-range');
+                    }
+                });
+            }
+        }
+
+        function resetTimeStyles() {
+            document.querySelectorAll('.time-option').forEach(opt => {
+                opt.classList.remove('selected', 'in-range');
+            });
+        }
+
+        function updateTimeDisplay() {
+            if (rangeStartIndex !== -1 && rangeEndIndex !== -1) {
+                const t1 = timeOptions[rangeStartIndex].text;
+                const t2 = timeOptions[rangeEndIndex].text;
+                document.getElementById('time-range-display').value = `${t1} - ${t2}`;
+            }
+        }
 
         // --- TOGGLE LOGIC ---
         function toggleTimeInputs() {
             const isAllDay = document.getElementById('all-day-switch').checked;
             const timeContainer = document.getElementById('time-inputs-container');
-            if (isAllDay) {
-                timeContainer.style.display = 'none';
-            } else {
-                timeContainer.style.display = 'flex';
-            }
+            timeContainer.style.display = isAllDay ? 'none' : 'block';
         }
 
         async function login() {
@@ -401,11 +503,9 @@
         function formatDateForDisplay(dateStr) {
             if (!dateStr) return "";
             const date = new Date(dateStr);
-            // 12-hour format enforced
             return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
         }
 
-        // --- GITHUB IO ---
         async function getFile(filename) {
             try {
                 const timestamp = new Date().getTime();
@@ -450,7 +550,7 @@
                 height: '80vh',
                 themeSystem: 'bootstrap5',
                 editable: true, droppable: true, eventResizableFromStart: true,
-                eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' }, // 12hr on calendar
+                eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
                 eventClick: function(info) { openEventModal(info.event); },
                 eventDrop: async function(info) { await handleDragResize(info.event); },
                 eventResize: async function(info) { await handleDragResize(info.event); },
@@ -542,28 +642,37 @@
                 const isAllDay = event.allDay;
                 document.getElementById('all-day-switch').checked = isAllDay;
                 
-                // Set Dates & Times
-                let startObj = event.start;
-                let endObj = event.end;
-                
-                // Date Range Picker population
-                let displayEnd = endObj;
+                let displayEnd = event.end;
                 if (isAllDay && displayEnd) {
                     displayEnd = new Date(displayEnd);
                     displayEnd.setDate(displayEnd.getDate() - 1);
                 }
-                fpDate.setDate([startObj, displayEnd]);
+                fpDate.setDate([event.start, displayEnd]);
 
-                // Time Pickers population (if timed)
-                if (!isAllDay) {
-                    fpStartTime.setDate(startObj);
-                    fpEndTime.setDate(endObj);
+                // Set Time Picker Values if not all day
+                if (!isAllDay && event.start && event.end) {
+                    const s = event.start;
+                    const e = event.end;
+                    
+                    // Convert date objects to minutes since midnight
+                    rangeStartIndex = timeOptions.findIndex(t => t.value === (s.getHours() * 60 + s.getMinutes()));
+                    rangeEndIndex = timeOptions.findIndex(t => t.value === (e.getHours() * 60 + e.getMinutes()));
+                    
+                    // Highlight logic
+                    resetTimeStyles();
+                    if(rangeStartIndex > -1) {
+                        document.querySelectorAll('.time-option')[rangeStartIndex].classList.add('selected');
+                    }
+                    if(rangeEndIndex > -1) {
+                        document.querySelectorAll('.time-option')[rangeEndIndex].classList.add('selected');
+                        handleTimeOptionHover(rangeEndIndex); // Trigger range highlight
+                    }
+                    updateTimeDisplay();
                 } else {
-                    // Reset to defaults if All Day
-                    fpStartTime.setDate("08:00");
-                    fpEndTime.setDate("17:00");
+                    rangeStartIndex = -1; rangeEndIndex = -1;
+                    document.getElementById('time-range-display').value = "";
+                    resetTimeStyles();
                 }
-                
                 toggleTimeInputs();
 
             } else {
@@ -572,13 +681,14 @@
                 document.getElementById('evt-id').value = "";
                 document.getElementById('evt-title').value = "";
                 document.getElementById('btn-delete-event').style.display = "none";
-                
                 document.getElementById('all-day-switch').checked = true;
                 toggleTimeInputs();
-                
                 fpDate.clear();
-                fpStartTime.setDate("08:00");
-                fpEndTime.setDate("17:00");
+                
+                // Reset Time Picker
+                rangeStartIndex = -1; rangeEndIndex = -1;
+                document.getElementById('time-range-display').value = "";
+                resetTimeStyles();
             }
             
             document.querySelectorAll('.member-check').forEach(box => box.addEventListener('change', updateSelectedCount));
@@ -606,30 +716,26 @@
             const selectedDates = fpDate.selectedDates;
             if (!selectedDates || selectedDates.length < 2) return showAlert("Select Date Range (Start & End).");
             
-            // Construct Start/End ISO Strings
             let startISO, endISO;
             const baseStartDate = selectedDates[0];
             const baseEndDate = selectedDates[1];
 
             if (isAllDay) {
-                // All Day: YYYY-MM-DD (End date exclusive for FC)
                 startISO = fpDate.formatDate(baseStartDate, "Y-m-d");
                 let endDateEx = new Date(baseEndDate);
                 endDateEx.setDate(endDateEx.getDate() + 1);
                 endISO = endDateEx.toISOString().split('T')[0];
             } else {
-                // Timed: Combine Date + Time Picker Values
-                const startTimeVal = fpStartTime.selectedDates[0];
-                const endTimeVal = fpEndTime.selectedDates[0];
+                if (rangeStartIndex === -1 || rangeEndIndex === -1) return showAlert("Select Time Range.");
                 
-                if (!startTimeVal || !endTimeVal) return showAlert("Select Start & End Times.");
+                const startMins = timeOptions[rangeStartIndex].value;
+                const endMins = timeOptions[rangeEndIndex].value;
 
-                // Create new Date objects combining selected date + selected time
                 let startFull = new Date(baseStartDate);
-                startFull.setHours(startTimeVal.getHours(), startTimeVal.getMinutes());
+                startFull.setHours(Math.floor(startMins / 60), startMins % 60);
                 
                 let endFull = new Date(baseEndDate);
-                endFull.setHours(endTimeVal.getHours(), endTimeVal.getMinutes());
+                endFull.setHours(Math.floor(endMins / 60), endMins % 60);
 
                 startISO = startFull.toISOString();
                 endISO = endFull.toISOString();
@@ -649,12 +755,8 @@
             };
 
             // CONFLICT CHECK
-            // Use ISO strings to create Date objects for comparison
             const newStart = new Date(startISO);
-            // Note: For AllDay conflict check, FC exclusive end date works if we compare < end.
-            // But if we use "2026-02-25" (exclusive), that represents midnight 25th.
-            const newEnd = new Date(endISO); 
-            
+            const newEnd = new Date(endISO);
             let conflicts = [];
 
             for (let event of scheduleData) {
