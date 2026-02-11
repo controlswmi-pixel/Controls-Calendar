@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler v4.2</title>
+    <title>Controls Team Scheduler v4.3</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -20,13 +20,13 @@
     <style>
         body { background-color: #0e1117; color: white; padding-bottom: 80px; overflow: hidden; }
         
-        /* --- CALENDAR POLISH --- */
+        /* Calendar Styling */
         .fc { height: 85vh; margin: 20px; }
         .fc-toolbar-title { font-size: 1.5rem !important; }
         
         /* Remove ugly blue underlines from dates */
         .fc a { text-decoration: none !important; color: inherit !important; }
-        .fc-col-header-cell-cushion { color: white !important; } /* Days of week */
+        .fc-col-header-cell-cushion { color: white !important; } 
         .fc-daygrid-day-number { color: rgba(255, 255, 255, 0.75) !important; padding: 4px 8px !important; }
         
         /* Event Styling */
@@ -89,7 +89,7 @@
         <div class="d-flex justify-content-between align-items-center px-4 pt-2">
             <h5 class="text-muted">
                 Controls & Automation Scheduler 
-                <span class="badge bg-success" style="font-size: 0.6em;">v4.2</span>
+                <span class="badge bg-success" style="font-size: 0.6em;">v4.3</span>
                 <span id="loading-spinner" class="spinner-border spinner-border-sm text-primary" role="status"></span>
             </h5>
         </div>
@@ -230,7 +230,6 @@
         let editingTeamIndex = -1;
         let editingTypeIndex = -1;
         
-        // Temp storage for conflicts
         let pendingSaveData = null; 
 
         // --- AUTH ---
@@ -256,7 +255,6 @@
                 const { Octokit } = window;
                 octokit = new Octokit({ auth: token });
                 const user = await octokit.request('GET /user');
-                console.log("Logged in as:", user.data.login);
                 localStorage.setItem('gh_token', token);
                 document.getElementById('login-overlay').style.display = 'none';
                 document.getElementById('app-container').style.display = 'block';
@@ -271,7 +269,7 @@
             showSpinner();
             await Promise.all([loadTeam(), loadTypes(), loadSchedule()]);
             
-            // Legacy Migration: Assign UUIDs to old events
+            // Legacy Migration
             let migrationNeeded = false;
             scheduleData.forEach(ev => {
                 if (!ev.id) {
@@ -288,24 +286,22 @@
         }
 
         // --- HELPERS ---
-        function showSpinner() { 
-            document.getElementById('loading-spinner').style.display = 'inline-block'; 
-        }
-        
-        function hideSpinner() { 
-            document.getElementById('loading-spinner').style.display = 'none'; 
-        }
-
-        function utf8_to_b64(str) { 
-            return window.btoa(unescape(encodeURIComponent(str))); 
-        }
-
+        function showSpinner() { document.getElementById('loading-spinner').style.display = 'inline-block'; }
+        function hideSpinner() { document.getElementById('loading-spinner').style.display = 'none'; }
+        function utf8_to_b64(str) { return window.btoa(unescape(encodeURIComponent(str))); }
         function b64_to_utf8(str) { 
-            try {
-                return decodeURIComponent(escape(window.atob(str)));
-            } catch (e) {
-                return window.atob(str);
-            }
+            try { return decodeURIComponent(escape(window.atob(str))); } 
+            catch (e) { return window.atob(str); } 
+        }
+
+        // NEW: Formatter for nice dates (e.g. Feb 22, 2026)
+        function formatDateForDisplay(dateStr) {
+            if (!dateStr) return "";
+            // Handle ISO strings by taking just the YYYY-MM-DD part to avoid timezone confusion
+            const ymd = dateStr.substring(0, 10);
+            const [y, m, d] = ymd.split('-');
+            const date = new Date(y, m - 1, d); // Local time constructor
+            return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
         }
 
         async function getFile(filename) {
@@ -403,10 +399,11 @@
                         members = [arg.event.resourceId];
                     }
                     
+                    let memberString = members.join(", ");
                     return {
                         html: `<div>
                                 <span class="event-title">${arg.event.title}</span>
-                                <span class="event-members">${members.join(", ")}</span>
+                                <span class="event-members">${memberString}</span>
                                </div>`
                     };
                 }
@@ -425,7 +422,6 @@
 
         // --- MODAL LOGIC ---
         function openEventModal(event = null) {
-            // Populate Members
             const list = document.getElementById('member-checkbox-list');
             list.innerHTML = "";
             teamData.forEach(member => {
@@ -438,7 +434,6 @@
                 list.appendChild(li);
             });
             
-            // Populate Types
             const typeSelect = document.getElementById('evt-type');
             typeSelect.innerHTML = "";
             typeData.forEach(type => {
@@ -450,7 +445,6 @@
             });
 
             if (event) {
-                // EDIT MODE
                 document.getElementById('eventModalTitle').innerText = "Edit Schedule Item";
                 document.getElementById('evt-id').value = event.id;
                 document.getElementById('evt-title').value = event.title;
@@ -465,13 +459,11 @@
                     if (members.includes(box.value)) box.checked = true;
                 });
 
-                // Set Dates
                 let displayEnd = new Date(event.end);
                 displayEnd.setDate(displayEnd.getDate() - 1);
                 fpInstance.setDate([event.start, displayEnd]);
 
             } else {
-                // NEW MODE
                 document.getElementById('eventModalTitle').innerText = "New Schedule Item";
                 document.getElementById('evt-id').value = "";
                 document.getElementById('evt-title').value = "";
@@ -516,7 +508,6 @@
 
             if (!title || selectedMembers.length === 0) return alert("Title and Members required.");
 
-            // Store data temporarily in global variable
             pendingSaveData = {
                 id: id || crypto.randomUUID(),
                 title: title, 
@@ -533,27 +524,32 @@
             let conflicts = [];
 
             for (let event of scheduleData) {
-                if (id && event.id === id) continue; // Skip self if editing
+                if (id && event.id === id) continue; 
                 if (!event.start || !event.end) continue;
                 
                 const evStart = new Date(event.start);
                 const evEnd = new Date(event.end);
                 
-                // If times overlap
                 if (newStart < evEnd && newEnd > evStart) {
                     const existingGroup = event.extendedProps.members || (event.resourceId ? [event.resourceId] : []);
                     const overlaps = selectedMembers.filter(m => existingGroup.includes(m));
                     
                     if (overlaps.length > 0) {
                         overlaps.forEach(person => {
-                            conflicts.push(`<b>${person}</b> is busy with "<i>${event.title}</i>" (${event.start} to ${event.end})`);
+                            // FORMAT DATES NICELY
+                            const displayStart = formatDateForDisplay(event.start);
+                            // Subtract 1 day from end date for Inclusive Display ("Feb 24" instead of "Feb 25")
+                            let endObj = new Date(event.end);
+                            endObj.setDate(endObj.getDate() - 1);
+                            const displayEnd = endObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                            
+                            conflicts.push(`<b>${person}</b> is busy with "<i>${event.title}</i>" (${displayStart} - ${displayEnd})`);
                         });
                     }
                 }
             }
 
             if (conflicts.length > 0) {
-                // Show Conflict Modal
                 const conflictList = document.getElementById('conflict-list');
                 conflictList.innerHTML = "";
                 conflicts.forEach(c => {
@@ -564,7 +560,6 @@
                 });
                 new bootstrap.Modal(document.getElementById('conflictModal')).show();
             } else {
-                // No conflicts, save immediately
                 finalizeSave();
             }
         }
@@ -578,11 +573,8 @@
             if (!pendingSaveData) return;
             
             const eventObj = pendingSaveData;
-            
-            // Check update vs create
             const index = scheduleData.findIndex(e => e.id === eventObj.id);
             if (index > -1) {
-                // UPDATE
                 scheduleData[index] = eventObj;
                 const calEvent = calendar.getEventById(eventObj.id);
                 if (calEvent) {
@@ -594,14 +586,13 @@
                     calEvent.setExtendedProp('type', eventObj.extendedProps.type);
                 }
             } else {
-                // CREATE
                 scheduleData.push(eventObj);
                 calendar.addEvent(eventObj);
             }
 
             bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
             scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
-            pendingSaveData = null; // Clear temp
+            pendingSaveData = null;
         }
 
         async function deleteEvent() {
