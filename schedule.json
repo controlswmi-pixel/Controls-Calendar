@@ -32,5 +32,20 @@
         "Dave Miller"
       ]
     }
+  },
+  {
+    "id": "17de177b-b6a1-4e85-b3bc-6e196577e9ae",
+    "title": "CRH - Vacation",
+    "start": "2026-05-30",
+    "end": "2026-06-15",
+    "allDay": true,
+    "backgroundColor": "#107C10",
+    "borderColor": "#107C10",
+    "extendedProps": {
+      "type": "Vacation",
+      "members": [
+        "Carson Hunter"
+      ]
+    }
   }
 ]
