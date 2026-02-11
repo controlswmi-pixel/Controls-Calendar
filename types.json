@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Panel Buildd",
+    "color": "#0078d4"
+  },
+  {
+    "name": "Vacation",
+    "color": "#107C10"
+  },
+  {
+    "name": "On-Site Startup",
+    "color": "#D13438"
+  },
+  {
+    "name": "Office Day",
+    "color": "#FF8C00"
+  },
+  {
+    "name": "Maintenance",
+    "color": "#881798"
+  }
+]
