@@ -14,10 +14,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <style>
-        body { background-color: #0e1117; color: white; padding-bottom: 80px; }
+        body { background-color: #0e1117; color: white; padding-bottom: 80px; overflow: hidden; }
+        
+        /* Calendar Styling */
         .fc { height: 85vh; margin: 20px; }
         .fc-toolbar-title { font-size: 1.5rem !important; }
         .fc-event { cursor: pointer; border: none; }
+        .fc-daygrid-event { white-space: normal !important; } /* Wrap text */
         
         /* Bottom Dock */
         .bottom-dock {
@@ -75,18 +78,30 @@
                 <div class="modal-body">
                     <input type="text" id="evt-title" class="form-control mb-3 bg-dark text-white" placeholder="Project / Description">
                     <div class="row g-2 mb-3">
-                        <div class="col-7"><select id="evt-assignee" class="form-select bg-dark text-white"></select></div>
-                        <div class="col-5"><select id="evt-type" class="form-select bg-dark text-white">
-                            <option value="#0078D4">Panel Build</option>
-                            <option value="#107C10">Vacation</option>
-                            <option value="#D13438">On-Site Startup</option>
-                            <option value="#FF8C00">Office Day</option>
-                            <option value="#881798">Maintenance</option>
-                        </select></div>
+                        <div class="col-7">
+                            <label class="small text-muted">Assignee</label>
+                            <select id="evt-assignee" class="form-select bg-dark text-white"></select>
+                        </div>
+                        <div class="col-5">
+                            <label class="small text-muted">Type</label>
+                            <select id="evt-type" class="form-select bg-dark text-white">
+                                <option value="#0078D4">Panel Build</option>
+                                <option value="#107C10">Vacation</option>
+                                <option value="#D13438">On-Site Startup</option>
+                                <option value="#FF8C00">Office Day</option>
+                                <option value="#881798">Maintenance</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="row g-2 mb-3">
-                        <div class="col-6"><input type="date" id="evt-start" class="form-control bg-dark text-white"></div>
-                        <div class="col-6"><input type="date" id="evt-end" class="form-control bg-dark text-white"></div>
+                        <div class="col-6">
+                            <label class="small text-muted">Start Date</label>
+                            <input type="date" id="evt-start" class="form-control bg-dark text-white">
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted">End Date</label>
+                            <input type="date" id="evt-end" class="form-control bg-dark text-white">
+                        </div>
                     </div>
                     <button onclick="saveEvent()" class="btn btn-primary w-100">Save Item</button>
                 </div>
@@ -106,7 +121,8 @@
                         <input type="text" id="new-member-name" class="form-control bg-dark text-white" placeholder="New Member Name">
                         <button onclick="addMember()" class="btn btn-success">Add</button>
                     </div>
-                    <ul id="team-list" class="list-group list-group-flush"></ul>
+                    <p class="text-muted small">Current Team Members:</p>
+                    <ul id="team-list" class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto;"></ul>
                 </div>
             </div>
         </div>
@@ -114,8 +130,8 @@
 
     <script>
         // --- CONFIG ---
-        const REPO_OWNER = "controlswmi-pixel"; // CHANGE THIS IF NEEDED
-        const REPO_NAME = "Controls-Calendar";  // CHANGE THIS IF NEEDED
+        const REPO_OWNER = "controlswmi-pixel"; 
+        const REPO_NAME = "Controls-Calendar"; 
         const SCHEDULE_FILE = "schedule.json";
         const TEAM_FILE = "team.json";
         
@@ -144,7 +160,6 @@
             if (!token) return alert("Please enter a token");
             
             try {
-                // Initialize Octokit
                 const { Octokit } = window;
                 octokit = new Octokit({ auth: token });
                 
@@ -172,7 +187,9 @@
         // --- GITHUB API HELPERS ---
         async function getFile(filename) {
             try {
-                const response = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, {
+                // Add timestamp to prevent browser caching
+                const timestamp = new Date().getTime();
+                const response = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}?t=${timestamp}`, {
                     owner: REPO_OWNER, repo: REPO_NAME, path: filename
                 });
                 return {
@@ -193,6 +210,7 @@
                     content: btoa(JSON.stringify(content, null, 2)),
                     sha: sha
                 });
+                // CRITICAL: Return the NEW SHA so we stay in sync
                 return response.data.content.sha;
             } catch (e) {
                 alert("Error saving: " + e.message);
@@ -203,18 +221,27 @@
         // --- DATA LOADING ---
         async function loadTeam() {
             const data = await getFile(TEAM_FILE);
-            teamData = data.content.length ? data.content : ["Carson", "Dave Miller"]; // Default
+            teamData = data.content.length ? data.content : ["Carson", "Dave Miller"]; 
             teamSha = data.sha;
-            
-            // Populate Dropdown
+            updateDropdowns(); // Update UI from local data
+        }
+
+        // Helper to update dropdowns without hitting the API
+        function updateDropdowns() {
             const select = document.getElementById('evt-assignee');
+            const currentVal = select.value; // Try to keep selection
             select.innerHTML = "";
+            
             teamData.forEach(member => {
                 const opt = document.createElement("option");
                 opt.value = member;
                 opt.innerText = member;
                 select.appendChild(opt);
             });
+            
+            if (teamData.includes(currentVal)) {
+                select.value = currentVal;
+            }
         }
 
         async function loadSchedule() {
@@ -246,7 +273,6 @@
 
             if (!title || !start || !end) return alert("Please fill all fields");
             
-            // Fix End Date (FullCalendar is exclusive)
             let endDateObj = new Date(end);
             endDateObj.setDate(endDateObj.getDate() + 1);
             const adjEnd = endDateObj.toISOString().split('T')[0];
@@ -260,13 +286,12 @@
                 resourceId: assignee
             };
             
-            // Optimistic UI Update
             calendar.addEvent(newEvent);
             const modal = bootstrap.Modal.getInstance(document.getElementById('addEventModal'));
             modal.hide();
 
-            // Save to GitHub
             scheduleData.push(newEvent);
+            // Wait for the new SHA and update our local variable
             scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
         }
 
@@ -291,23 +316,47 @@
         }
 
         async function addMember() {
-            const name = document.getElementById('new-member-name').value;
+            const nameInput = document.getElementById('new-member-name');
+            const name = nameInput.value.trim();
+            
             if (name && !teamData.includes(name)) {
+                // 1. Update Local Data
                 teamData.push(name);
                 teamData.sort();
+                
+                // 2. Update UI Immediately
                 renderTeamList();
-                document.getElementById('new-member-name').value = "";
-                teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
-                loadTeam(); // Update dropdowns
+                updateDropdowns(); // Update dropdowns locally
+                nameInput.value = "";
+                
+                // 3. Save to Server and capture the NEW SHA
+                try {
+                    const newSha = await saveFile(TEAM_FILE, teamData, teamSha);
+                    teamSha = newSha; // <--- CRITICAL FIX: Update the lock
+                } catch (err) {
+                    console.error("Save failed", err);
+                    alert("Failed to save to GitHub. Refresh page.");
+                }
             }
         }
 
         async function removeMember(index) {
             if(confirm(`Remove ${teamData[index]}?`)) {
+                // 1. Update Local Data
                 teamData.splice(index, 1);
+                
+                // 2. Update UI Immediately
                 renderTeamList();
-                teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
-                loadTeam(); // Update dropdowns
+                updateDropdowns();
+                
+                // 3. Save to Server and capture the NEW SHA
+                try {
+                    const newSha = await saveFile(TEAM_FILE, teamData, teamSha);
+                    teamSha = newSha; // <--- CRITICAL FIX: Update the lock
+                } catch (err) {
+                    console.error("Save failed", err);
+                    alert("Failed to save to GitHub. Refresh page.");
+                }
             }
         }
     </script>
