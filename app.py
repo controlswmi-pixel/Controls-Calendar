@@ -24,31 +24,31 @@ CATEGORY_COLORS = {
     "Maintenance": "#881798"       # Purple
 }
 
-# --- CSS for "Single Screen" & Clean Layout ---
-def inject_custom_css():
+# --- 1. Global Page CSS (Layout & Sidebar) ---
+def inject_page_css():
     st.markdown("""
         <style>
-            /* 1. Maximize main content area */
+            /* Maximize main content area */
             .block-container {
-                padding-top: 0.5rem !important; /* Reduced further to push it up */
+                padding-top: 0.5rem !important;
                 padding-bottom: 0rem !important;
                 padding-left: 1rem !important;
                 padding-right: 1rem !important;
                 max-width: 100% !important;
             }
             
-            /* 2. Hide Streamlit Header & Footer */
+            /* Hide Streamlit Header & Footer */
             header {visibility: hidden;}
             footer {visibility: hidden;}
             #MainMenu {visibility: hidden;}
             
-            /* 3. Sidebar styling */
+            /* Sidebar styling */
             [data-testid="stSidebar"] {
                 min-width: 350px;
                 max-width: 350px;
             }
             
-            /* 4. Form styling */
+            /* Sidebar Form styling */
             [data-testid="stForm"] {
                 border: 1px solid #444;
                 padding: 20px;
@@ -56,6 +56,27 @@ def inject_custom_css():
             }
         </style>
     """, unsafe_allow_html=True)
+
+# --- 2. Calendar Component CSS (The Fix for Height) ---
+CALENDAR_CSS = """
+    /* Force the calendar container to take up 85% of the viewport height */
+    .fc {
+        height: 85vh !important;
+    }
+    
+    /* Improve the look of the event bars */
+    .fc-event {
+        cursor: pointer;
+        padding: 2px 4px;
+        font-size: 0.9rem;
+        border: none !important;
+    }
+    
+    /* Ensure the grid cells stretch to fill the height */
+    .fc-view-harness {
+        height: 100% !important;
+    }
+"""
 
 def load_data_from_github():
     try:
@@ -86,7 +107,7 @@ def check_conflicts(new_event, current_schedule):
 
 # --- Main Application ---
 st.set_page_config(page_title="Controls Schedule", layout="wide")
-inject_custom_css()
+inject_page_css()
 
 # Load Data
 schedule_data, file_sha = load_data_from_github()
@@ -152,12 +173,12 @@ calendar_options = {
     "selectable": True,
     "editable": False,
     "navLinks": True,
-    
-    # --- VISUAL FIXES HERE ---
-    "height": "85vh",        # Force height to 85% of viewport
-    "expandRows": True,      # CRITICAL: Forces rows to stretch to fill that height
-    "handleWindowResize": True,
-    "contentHeight": "auto",
+    # We remove the height setting here and rely on custom_css below
 }
 
-calendar(events=schedule_data, options=calendar_options)
+# Pass the custom CSS directly to the component
+calendar(
+    events=schedule_data, 
+    options=calendar_options, 
+    custom_css=CALENDAR_CSS
+)
