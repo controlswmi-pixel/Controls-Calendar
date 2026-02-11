@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler</title>
+    <title>Controls Team Scheduler v2.0</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -46,14 +46,17 @@
             border: 1px solid #333; width: 400px;
         }
 
-        /* Custom Scrollbar for lists */
+        /* Scrollable Lists */
         .scrollable-list { max-height: 300px; overflow-y: auto; }
         .scrollable-list::-webkit-scrollbar { width: 8px; }
         .scrollable-list::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
         
         /* Dropdown Checkboxes */
-        .dropdown-item-checkbox { padding: 8px 15px; cursor: pointer; }
+        .dropdown-item-checkbox { padding: 8px 15px; cursor: pointer; display: block; }
         .dropdown-item-checkbox:hover { background-color: #333; }
+        
+        /* Color Swatch */
+        .color-swatch { display: inline-block; width: 15px; height: 15px; border-radius: 3px; margin-right: 8px; }
     </style>
 </head>
 <body>
@@ -68,6 +71,10 @@
     </div>
 
     <div id="app-container" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center px-4 pt-2">
+            <h5 class="text-muted">Controls & Automation Scheduler <span class="badge bg-primary" style="font-size: 0.6em;">v2.0</span></h5>
+        </div>
+
         <div id="calendar"></div>
         
         <div class="bottom-dock">
@@ -90,7 +97,7 @@
                     
                     <div class="row g-2 mb-3">
                         <div class="col-7">
-                            <label class="small text-muted">Assign Members</label>
+                            <label class="small text-muted">Assign Members (Multi-Select)</label>
                             <div class="dropdown">
                                 <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-white bg-dark" type="button" id="multiSelectBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside">
                                     Select Members...
@@ -223,6 +230,7 @@
         }
 
         async function initApp() {
+            // Load everything in parallel
             await Promise.all([loadTeam(), loadTypes(), loadSchedule()]);
             initCalendar();
         }
@@ -230,7 +238,7 @@
         // --- GITHUB API HELPERS ---
         async function getFile(filename) {
             try {
-                const timestamp = new Date().getTime();
+                const timestamp = new Date().getTime(); // Prevent caching
                 const response = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}?t=${timestamp}`, {
                     owner: REPO_OWNER, repo: REPO_NAME, path: filename
                 });
@@ -277,47 +285,48 @@
             scheduleSha = data.sha;
         }
 
-        // --- CALENDAR & UI ---
+        // --- CALENDAR ---
         function initCalendar() {
             const calendarEl = document.getElementById('calendar');
             calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
                 headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listMonth' },
                 events: scheduleData,
-                height: '85vh',
+                height: '80vh',
                 themeSystem: 'bootstrap5'
             });
             calendar.render();
         }
 
+        // --- ADD EVENT & MULTI-SELECT ---
         function openAddEventModal() {
-            // Populate Multi-Select Dropdown
+            // 1. Populate Member Checkboxes
             const list = document.getElementById('member-checkbox-list');
             list.innerHTML = "";
             teamData.forEach(member => {
                 const li = document.createElement("li");
                 li.innerHTML = `
-                    <label class="dropdown-item-checkbox w-100 d-block text-white">
+                    <label class="dropdown-item-checkbox text-white">
                         <input type="checkbox" class="form-check-input me-2 member-check" value="${member}">
                         ${member}
                     </label>`;
                 list.appendChild(li);
             });
-            updateSelectedCount(); // Reset Text
-            
-            // Listen for checkbox changes to update button text
+            updateSelectedCount(); // Reset text
+
+            // Add Listeners
             document.querySelectorAll('.member-check').forEach(box => {
                 box.addEventListener('change', updateSelectedCount);
             });
 
-            // Populate Type Dropdown
+            // 2. Populate Types
             const typeSelect = document.getElementById('evt-type');
             typeSelect.innerHTML = "";
             typeData.forEach(type => {
                 const opt = document.createElement("option");
-                opt.value = type.color; // Value is color
+                opt.value = type.color; 
                 opt.innerText = type.name;
-                opt.setAttribute('data-name', type.name); // Store name
+                opt.setAttribute('data-name', type.name);
                 typeSelect.appendChild(opt);
             });
 
@@ -332,7 +341,6 @@
             else btn.innerText = `${checked.length} Members Selected`;
         }
 
-        // --- SAVE EVENT LOGIC ---
         async function saveEvent() {
             const title = document.getElementById('evt-title').value;
             const typeSelect = document.getElementById('evt-type');
@@ -341,7 +349,7 @@
             const start = document.getElementById('evt-start').value;
             let end = document.getElementById('evt-end').value;
 
-            // Get Selected Members
+            // Get Checkboxes
             const checkboxes = document.querySelectorAll('.member-check:checked');
             const selectedMembers = Array.from(checkboxes).map(cb => cb.value);
 
@@ -349,17 +357,16 @@
                 return alert("Please fill title, dates, and select at least one member.");
             }
             
-            // Fix End Date
+            // Fix Date (Exclusive End)
             let endDateObj = new Date(end);
             endDateObj.setDate(endDateObj.getDate() + 1);
             const adjEnd = endDateObj.toISOString().split('T')[0];
 
-            // Create Event for EACH selected member
+            // Create 1 Event Per Person
             const newEvents = [];
-            
             selectedMembers.forEach(member => {
                 newEvents.push({
-                    title: `${member}: ${title}`, // Carson: Panel Build
+                    title: `${member}: ${title}`, 
                     start: start,
                     end: adjEnd,
                     backgroundColor: color,
@@ -369,7 +376,7 @@
                 });
             });
 
-            // Optimistic Update
+            // UI Update
             newEvents.forEach(ev => calendar.addEvent(ev));
             bootstrap.Modal.getInstance(document.getElementById('addEventModal')).hide();
 
@@ -424,10 +431,9 @@
             typeData.forEach((type, index) => {
                 const li = document.createElement("li");
                 li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
-                // Show color swatch and name
                 li.innerHTML = `
                     <div class="d-flex align-items-center">
-                        <span style="display:inline-block; width:15px; height:15px; background-color:${type.color}; margin-right:10px; border-radius:3px;"></span>
+                        <span class="color-swatch" style="background-color:${type.color};"></span>
                         <span>${type.name}</span>
                     </div>
                     <button class="btn btn-sm btn-outline-danger" onclick="removeType(${index})">🗑️</button>
@@ -440,7 +446,6 @@
             const name = document.getElementById('new-type-name').value.trim();
             const color = document.getElementById('new-type-color').value;
             
-            // Check for duplicates
             if (name && !typeData.some(t => t.name === name)) {
                 typeData.push({ name: name, color: color });
                 renderTypeList();
