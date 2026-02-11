@@ -18,8 +18,8 @@
   {
     "id": "d7acf967-c2f8-427f-bc60-7ed246c1484a",
     "title": "SFI Ozone System Startup",
-    "start": "2026-02-18",
-    "end": "2026-02-21",
+    "start": "2026-02-25T00:00:00-05:00",
+    "end": "2026-02-28T00:00:00-05:00",
     "backgroundColor": "#D13438",
     "borderColor": "#D13438",
     "extendedProps": {
