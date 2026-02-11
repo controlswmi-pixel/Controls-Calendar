@@ -25,28 +25,53 @@ CATEGORY_COLORS = {
     "Maintenance": "#881798"       # Purple
 }
 
-# --- CSS: Bottom Dock & Layout ---
+# --- CSS: The Bottom Dock & Layout ---
 def inject_page_css():
     st.markdown("""
         <style>
-            /* 1. Hide Sidebar Completely */
-            [data-testid="stSidebar"] {display: none;}
-            section[data-testid="stSidebar"] {display: none;}
-            
-            /* 2. Hide Header/Footer */
-            header {visibility: hidden;}
-            footer {visibility: hidden;}
-            
-            /* 3. Maximize Screen Real Estate */
+            /* 1. Reset Main Container */
             .block-container {
                 padding-top: 1rem !important;
-                padding-bottom: 5rem !important; /* Space for bottom dock */
-                padding-left: 1rem !important;
-                padding-right: 1rem !important;
+                padding-bottom: 5rem !important; /* Make room for the dock */
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
                 max-width: 100% !important;
             }
             
-            /* 4. Calendar Styling */
+            /* 2. Hide Standard Streamlit UI */
+            header, footer, [data-testid="stSidebar"] {display: none !important;}
+            
+            /* 3. THE BOTTOM DOCK BAR */
+            /* We target the specific horizontal block at the bottom of the script */
+            [data-testid="stHorizontalBlock"]:last-of-type {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                background-color: #1a1b21; /* Darker distinct background */
+                border-top: 1px solid #333;
+                padding: 10px 20px;
+                z-index: 1000;
+                gap: 10px; /* Spacing between buttons */
+            }
+            
+            /* 4. Dock Buttons Styling */
+            /* Target buttons specifically inside the dock to make them tall and bold */
+            [data-testid="stHorizontalBlock"]:last-of-type button {
+                height: 3rem;
+                border: 1px solid #444;
+                background-color: #262730;
+                color: white;
+                font-weight: 600;
+                border-radius: 8px;
+            }
+            [data-testid="stHorizontalBlock"]:last-of-type button:hover {
+                border-color: #0078D4;
+                color: #0078D4;
+                background-color: #2b2d35;
+            }
+
+            /* 5. Calendar Tweaks */
             .fc-event-title {
                 white-space: normal !important;
                 overflow: hidden !important;
@@ -54,26 +79,15 @@ def inject_page_css():
                 font-size: 0.85rem !important;
             }
             
-            /* 5. Bottom Dock Container */
-            .bottom-dock {
-                position: fixed;
-                bottom: 0;
-                left: 0;
-                width: 100%;
-                background-color: #262730; /* Dark mode match */
-                border-top: 1px solid #444;
-                padding: 15px 20px;
-                z-index: 9999;
-                text-align: center;
-                box-shadow: 0px -2px 10px rgba(0,0,0,0.3);
-            }
-            
-            /* 6. Action Buttons */
-            div.stButton > button {
-                width: 100%;
-                border-radius: 8px;
-                height: 3rem;
-                font-weight: bold;
+            /* 6. Team Manager List Styling */
+            .team-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 8px;
+                background-color: #262730;
+                margin-bottom: 5px;
+                border-radius: 5px;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -101,7 +115,7 @@ def save_data(filename, new_data, sha=None):
         repo.create_file(path=filename, message=f"Create {filename}", content=json.dumps(new_data, indent=4))
 
 # --- DIALOG: Add Event ---
-@st.dialog("➕ Add Schedule Item")
+@st.dialog("➕ New Schedule Item")
 def add_event_dialog(team_list, schedule_data, schedule_sha):
     with st.form("add_event_form", clear_on_submit=True):
         title = st.text_input("Project / Description", placeholder="e.g. Line 4 Commissioning")
@@ -114,6 +128,7 @@ def add_event_dialog(team_list, schedule_data, schedule_sha):
         start_date = c3.date_input("Start", value="today")
         end_date = c4.date_input("End", value="today")
         
+        st.write("")
         if st.form_submit_button("Save Item", use_container_width=True):
             if start_date > end_date:
                 st.error("End date must be after start date.")
@@ -145,17 +160,14 @@ def add_event_dialog(team_list, schedule_data, schedule_sha):
                 if not conflict:
                     schedule_data.append(new_event)
                     save_data(SCHEDULE_FILE, schedule_data, schedule_sha)
-                    st.success("Saved!")
                     st.rerun()
 
 # --- DIALOG: Manage Team ---
-@st.dialog("👥 Manage Team")
+@st.dialog("👥 Team Management")
 def manage_team_dialog(current_team, team_sha):
-    st.caption("Add or remove members from the list below.")
-    
-    # 1. Add New Member Section
-    c_input, c_btn = st.columns([3, 1])
-    new_name = c_input.text_input("Add Name", label_visibility="collapsed", placeholder="New Member Name")
+    # 1. Quick Add at Top
+    c_in, c_btn = st.columns([3, 1])
+    new_name = c_in.text_input("New Member", label_visibility="collapsed", placeholder="Enter name...")
     if c_btn.button("Add", use_container_width=True):
         if new_name and new_name not in current_team:
             current_team.append(new_name)
@@ -165,14 +177,18 @@ def manage_team_dialog(current_team, team_sha):
     
     st.divider()
     
-    # 2. List of Current Members
-    st.markdown("#### Current Team")
-    # Using a container for the list so it scrolls if long
+    # 2. Clean List of Members with Delete Buttons
+    st.caption(f"Current Team ({len(current_team)})")
+    
+    # Scrollable container for the list
     with st.container(height=300):
         for member in current_team:
-            col_name, col_del = st.columns([4, 1])
-            col_name.write(f"👤 {member}")
-            if col_del.button("❌", key=f"del_{member}"):
+            # Create a "Row" layout
+            col_txt, col_del = st.columns([4, 1])
+            col_txt.markdown(f"<div style='padding-top: 10px; font-size:16px;'>👤 <b>{member}</b></div>", unsafe_allow_html=True)
+            
+            # The trash button
+            if col_del.button("🗑️", key=f"del_{member}", help=f"Remove {member}"):
                 current_team.remove(member)
                 save_data(TEAM_FILE, current_team, team_sha)
                 st.rerun()
@@ -198,29 +214,22 @@ calendar_options = {
     "initialView": "dayGridMonth",
     "selectable": True,
     "editable": False,
-    "height": "75vh", # Leave room for bottom dock
+    "height": "80vh", # Leaves just enough room for the dock
     "expandRows": True,
     "handleWindowResize": True,
 }
 
 calendar(events=schedule_data, options=calendar_options)
 
-# --- Render Bottom Dock ---
-# We use a container placed after the calendar to act as the dock
-st.write("") # Spacer
-st.divider() # Visual separation
+# --- THE BOTTOM DOCK ---
+# This specific horizontal block is targeted by the CSS above to stick to the bottom
+dock_col1, dock_col2, dock_col3 = st.columns(3)
 
-col_left, col_mid, col_right = st.columns([1, 2, 1])
+if dock_col1.button("➕ Add Item", use_container_width=True):
+    add_event_dialog(team_data, schedule_data, schedule_sha)
 
-with col_mid:
-    # This creates the centered button row
-    b1, b2, b3 = st.columns(3)
-    
-    if b1.button("➕ Add Item", use_container_width=True):
-        add_event_dialog(team_data, schedule_data, schedule_sha)
-        
-    if b2.button("👥 Team", use_container_width=True):
-        manage_team_dialog(team_data, team_sha)
-        
-    if b3.button("🔄 Refresh", use_container_width=True):
-        st.rerun()
+if dock_col2.button("👥 Team", use_container_width=True):
+    manage_team_dialog(team_data, team_sha)
+
+if dock_col3.button("🔄 Refresh", use_container_width=True):
+    st.rerun()
