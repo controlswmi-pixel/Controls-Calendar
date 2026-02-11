@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # --- Configuration ---
 # You will set these in Streamlit Secrets later
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
-REPO_NAME = "your-username/controls-team-scheduler" # CHANGE THIS
+REPO_NAME = "controlswmi-pixel/Controls-Calendar"
 FILE_PATH = "schedule.json"
 
 # --- Color Mapping for your "Legend" ---
