@@ -14,20 +14,5 @@
         "Christopher Smith"
       ]
     }
-  },
-  {
-    "id": "4045ff90-142d-44d0-af05-913a78141954",
-    "title": "Fish Farm",
-    "start": "2026-02-17",
-    "end": "2026-02-19",
-    "backgroundColor": "#D13438",
-    "borderColor": "#D13438",
-    "extendedProps": {
-      "type": "On-Site Startup",
-      "members": [
-        "Carson",
-        "Christopher Smith"
-      ]
-    }
   }
 ]
