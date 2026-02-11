@@ -14,19 +14,5 @@
         "Eric Zelt"
       ]
     }
-  },
-  {
-    "id": "5ee124b2-42a7-4aaa-8651-fce594f3681b",
-    "title": "Eric's Test",
-    "start": "2026-02-24",
-    "end": "2026-02-26",
-    "backgroundColor": "#107C10",
-    "borderColor": "#107C10",
-    "extendedProps": {
-      "type": "Vacation",
-      "members": [
-        "Eric Zelt"
-      ]
-    }
   }
 ]
