@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler v5.0</title>
+    <title>Controls Team Scheduler v5.1</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -24,13 +24,17 @@
         .fc { height: 85vh; margin: 20px; }
         .fc-toolbar-title { font-size: 1.5rem !important; }
         .fc a { text-decoration: none !important; color: inherit !important; }
+        
+        /* Month View Tweaks */
         .fc-col-header-cell-cushion { color: white !important; } 
         .fc-daygrid-day-number { color: rgba(255, 255, 255, 0.75) !important; padding: 4px 8px !important; }
         
+        /* List View Tweaks */
         .fc-list-day-cushion { background-color: #262730 !important; }
         .fc-list-day-text, .fc-list-day-side-text { color: white !important; }
         .fc-list-event:hover td { background-color: #2b2d35 !important; }
         
+        /* Event Styling */
         .fc-event { cursor: pointer; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .fc-event:hover { filter: brightness(1.1); }
         .fc-event-main { padding: 4px; }
@@ -94,7 +98,7 @@
         <div class="d-flex justify-content-between align-items-center px-4 pt-2">
             <h5 class="text-muted">
                 Controls & Automation Scheduler 
-                <span class="badge bg-success" style="font-size: 0.6em;">v5.0</span>
+                <span class="badge bg-success" style="font-size: 0.6em;">v5.1</span>
                 <span id="loading-spinner" class="spinner-border spinner-border-sm text-primary" role="status"></span>
             </h5>
         </div>
@@ -295,7 +299,7 @@
         let editingTeamIndex = -1;
         let editingTypeIndex = -1;
         let pendingSaveData = null; 
-        let activeFilters = []; // New Filter State
+        let activeFilters = []; // Filter State
 
         // --- AUTH ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -316,7 +320,11 @@
         // --- TIME TOGGLE LOGIC ---
         function toggleTimePicker() {
             const isAllDay = document.getElementById('all-day-switch').checked;
+            
+            // Re-initialize Flatpickr with new settings
+            // If range selected, try to preserve it, but mode change might clear it
             const currentDates = fpInstance.selectedDates;
+            
             fpInstance.destroy();
             fpInstance = flatpickr("#date-range-picker", {
                 mode: "range",
@@ -325,7 +333,7 @@
                 time_24hr: false,
                 theme: "dark",
                 minDate: "today",
-                defaultDate: currentDates
+                defaultDate: currentDates // Try to restore dates
             });
         }
 
@@ -369,10 +377,11 @@
             initCalendar();
         }
 
-        // --- FILTER LOGIC (New v5.0) ---
+        // --- FILTER LOGIC (NEW) ---
         function openFilterModal() {
             const list = document.getElementById('filter-list');
             list.innerHTML = "";
+            
             teamData.forEach(member => {
                 const isChecked = activeFilters.includes(member) ? "checked" : "";
                 const div = document.createElement("div");
@@ -383,6 +392,7 @@
                 `;
                 list.appendChild(div);
             });
+            
             new bootstrap.Modal(document.getElementById('filterModal')).show();
         }
 
@@ -404,14 +414,21 @@
             if (!calendar) return;
             
             // Filter logic: Show event if ANY of its members are in activeFilters
+            // Or if activeFilters is empty, show everything? No, standard logic is show none.
+            // But if event has NO members, show it or hide? Let's hide orphaned events.
+            
             const visibleEvents = scheduleData.filter(event => {
                 const members = event.extendedProps.members || (event.resourceId ? [event.resourceId] : []);
-                // If event has no members, show it? Or hide? Let's hide orphaned events to be safe.
+                
+                // If it has no members attached, decide if we show or hide.
+                // For safety, let's say we hide it if filtering is active.
                 if (members.length === 0) return true; 
+                
+                // Does this event have at least one member who is currently checked?
                 return members.some(m => activeFilters.includes(m));
             });
 
-            // Update Calendar Source without destroying calendar
+            // Update Calendar Source
             calendar.removeAllEvents();
             calendar.addEventSource(visibleEvents);
         }
@@ -489,7 +506,7 @@
             calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
                 headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listMonth' },
-                events: scheduleData, // Initial load
+                events: scheduleData, // Load full data initially
                 height: '80vh',
                 themeSystem: 'bootstrap5',
                 editable: true, droppable: true, eventResizableFromStart: true,
@@ -502,8 +519,7 @@
                 }
             });
             calendar.render();
-            // Apply initial filter (just in case)
-            refreshCalendarEvents();
+            refreshCalendarEvents(); // Apply filters immediately after render
         }
 
         async function handleDragResize(event) {
@@ -672,10 +688,7 @@
             } else {
                 scheduleData.push(eventObj);
             }
-            
-            // REFRESH CALENDAR FROM SOURCE (Applies filters immediately)
             refreshCalendarEvents();
-
             bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
             scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
             pendingSaveData = null;
@@ -694,7 +707,7 @@
             }
         }
 
-        // --- MANAGERS ---
+        // --- TEAM MANAGER ---
         function openTeamManager() { cancelTeamEdit(); renderTeamList(); new bootstrap.Modal(document.getElementById('teamModal')).show(); }
         function renderTeamList() {
             const list = document.getElementById('team-list'); list.innerHTML = "";
@@ -729,6 +742,7 @@
         function confirmRemoveMember(index) { showConfirm(`Remove ${teamData[index]}?`, () => removeMember(index)); }
         async function removeMember(index) { teamData.splice(index, 1); renderTeamList(); teamSha = await saveFile(TEAM_FILE, teamData, teamSha); }
 
+        // --- TYPE MANAGER ---
         function openTypeManager() { cancelTypeEdit(); renderTypeList(); new bootstrap.Modal(document.getElementById('typeModal')).show(); }
         function renderTypeList() {
             const list = document.getElementById('type-list'); list.innerHTML = "";
