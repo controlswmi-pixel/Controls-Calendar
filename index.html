@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler v4.1</title>
+    <title>Controls Team Scheduler v4.2</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -20,13 +20,18 @@
     <style>
         body { background-color: #0e1117; color: white; padding-bottom: 80px; overflow: hidden; }
         
-        /* Calendar Styling */
+        /* --- CALENDAR POLISH --- */
         .fc { height: 85vh; margin: 20px; }
         .fc-toolbar-title { font-size: 1.5rem !important; }
+        
+        /* Remove ugly blue underlines from dates */
+        .fc a { text-decoration: none !important; color: inherit !important; }
+        .fc-col-header-cell-cushion { color: white !important; } /* Days of week */
+        .fc-daygrid-day-number { color: rgba(255, 255, 255, 0.75) !important; padding: 4px 8px !important; }
+        
+        /* Event Styling */
         .fc-event { cursor: pointer; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .fc-event:hover { filter: brightness(1.1); }
-        
-        /* Event Content */
         .fc-event-main { padding: 4px; }
         .event-title { font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 2px; }
         .event-members { font-size: 0.75em; opacity: 0.9; display: block; line-height: 1.1; }
@@ -84,7 +89,7 @@
         <div class="d-flex justify-content-between align-items-center px-4 pt-2">
             <h5 class="text-muted">
                 Controls & Automation Scheduler 
-                <span class="badge bg-success" style="font-size: 0.6em;">v4.1</span>
+                <span class="badge bg-success" style="font-size: 0.6em;">v4.2</span>
                 <span id="loading-spinner" class="spinner-border spinner-border-sm text-primary" role="status"></span>
             </h5>
         </div>
@@ -251,6 +256,7 @@
                 const { Octokit } = window;
                 octokit = new Octokit({ auth: token });
                 const user = await octokit.request('GET /user');
+                console.log("Logged in as:", user.data.login);
                 localStorage.setItem('gh_token', token);
                 document.getElementById('login-overlay').style.display = 'none';
                 document.getElementById('app-container').style.display = 'block';
@@ -265,22 +271,42 @@
             showSpinner();
             await Promise.all([loadTeam(), loadTypes(), loadSchedule()]);
             
-            // Legacy Migration
+            // Legacy Migration: Assign UUIDs to old events
             let migrationNeeded = false;
             scheduleData.forEach(ev => {
-                if (!ev.id) { ev.id = crypto.randomUUID(); migrationNeeded = true; }
+                if (!ev.id) {
+                    ev.id = crypto.randomUUID();
+                    migrationNeeded = true;
+                }
             });
-            if (migrationNeeded) await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
+            if (migrationNeeded) {
+                scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
+            }
             
             hideSpinner();
             initCalendar();
         }
 
         // --- HELPERS ---
-        function showSpinner() { document.getElementById('loading-spinner').style.display = 'inline-block'; }
-        function hideSpinner() { document.getElementById('loading-spinner').style.display = 'none'; }
-        function utf8_to_b64(str) { return window.btoa(unescape(encodeURIComponent(str))); }
-        function b64_to_utf8(str) { try { return decodeURIComponent(escape(window.atob(str))); } catch (e) { return window.atob(str); } }
+        function showSpinner() { 
+            document.getElementById('loading-spinner').style.display = 'inline-block'; 
+        }
+        
+        function hideSpinner() { 
+            document.getElementById('loading-spinner').style.display = 'none'; 
+        }
+
+        function utf8_to_b64(str) { 
+            return window.btoa(unescape(encodeURIComponent(str))); 
+        }
+
+        function b64_to_utf8(str) { 
+            try {
+                return decodeURIComponent(escape(window.atob(str)));
+            } catch (e) {
+                return window.atob(str);
+            }
+        }
 
         async function getFile(filename) {
             try {
@@ -288,24 +314,33 @@
                 const response = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}?t=${timestamp}`, {
                     owner: REPO_OWNER, repo: REPO_NAME, path: filename
                 });
-                return { content: JSON.parse(b64_to_utf8(response.data.content)), sha: response.data.sha };
-            } catch (e) { return { content: null, sha: null }; }
+                return {
+                    content: JSON.parse(b64_to_utf8(response.data.content)),
+                    sha: response.data.sha
+                };
+            } catch (e) {
+                return { content: null, sha: null };
+            }
         }
 
         async function saveFile(filename, content, sha) {
             showSpinner();
             if (!sha) {
                 try {
-                    const check = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, { owner: REPO_OWNER, repo: REPO_NAME, path: filename });
+                    const check = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, {
+                        owner: REPO_OWNER, repo: REPO_NAME, path: filename
+                    });
                     sha = check.data.sha;
                 } catch (e) {}
             }
+            
             const params = {
                 owner: REPO_OWNER, repo: REPO_NAME, path: filename,
                 message: "Update via Web App",
                 content: utf8_to_b64(JSON.stringify(content, null, 2))
             };
             if (sha) params.sha = sha;
+
             try {
                 const response = await octokit.request(`PUT /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, params);
                 hideSpinner();
@@ -317,9 +352,23 @@
             }
         }
 
-        async function loadTeam() { const data = await getFile(TEAM_FILE); teamData = data.content || ["Carson", "Dave Miller"]; teamSha = data.sha; }
-        async function loadTypes() { const data = await getFile(TYPES_FILE); typeData = data.content || DEFAULT_TYPES; typeSha = data.sha; }
-        async function loadSchedule() { const data = await getFile(SCHEDULE_FILE); scheduleData = data.content || []; scheduleSha = data.sha; }
+        async function loadTeam() {
+            const data = await getFile(TEAM_FILE);
+            teamData = data.content || ["Carson", "Dave Miller"];
+            teamSha = data.sha;
+        }
+
+        async function loadTypes() {
+            const data = await getFile(TYPES_FILE);
+            typeData = data.content || DEFAULT_TYPES;
+            typeSha = data.sha;
+        }
+
+        async function loadSchedule() {
+            const data = await getFile(SCHEDULE_FILE);
+            scheduleData = data.content || [];
+            scheduleSha = data.sha;
+        }
 
         // --- CALENDAR LOGIC ---
         function initCalendar() {
@@ -330,13 +379,36 @@
                 events: scheduleData,
                 height: '80vh',
                 themeSystem: 'bootstrap5',
-                editable: true, droppable: true, eventResizableFromStart: true,
-                eventClick: function(info) { openEventModal(info.event); },
-                eventDrop: async function(info) { await handleDragResize(info.event); },
-                eventResize: async function(info) { await handleDragResize(info.event); },
+                editable: true,
+                droppable: true,
+                eventResizableFromStart: true,
+                
+                eventClick: function(info) {
+                    openEventModal(info.event);
+                },
+
+                eventDrop: async function(info) {
+                    await handleDragResize(info.event);
+                },
+
+                eventResize: async function(info) {
+                    await handleDragResize(info.event);
+                },
+
                 eventContent: function(arg) {
-                    let members = (arg.event.extendedProps && arg.event.extendedProps.members) ? arg.event.extendedProps.members : (arg.event.resourceId ? [arg.event.resourceId] : []);
-                    return { html: `<div><span class="event-title">${arg.event.title}</span><span class="event-members">${members.join(", ")}</span></div>` };
+                    let members = [];
+                    if (arg.event.extendedProps && arg.event.extendedProps.members) {
+                        members = arg.event.extendedProps.members;
+                    } else if (arg.event.resourceId) {
+                        members = [arg.event.resourceId];
+                    }
+                    
+                    return {
+                        html: `<div>
+                                <span class="event-title">${arg.event.title}</span>
+                                <span class="event-members">${members.join(", ")}</span>
+                               </div>`
+                    };
                 }
             });
             calendar.render();
@@ -353,23 +425,32 @@
 
         // --- MODAL LOGIC ---
         function openEventModal(event = null) {
+            // Populate Members
             const list = document.getElementById('member-checkbox-list');
             list.innerHTML = "";
             teamData.forEach(member => {
                 const li = document.createElement("li");
-                li.innerHTML = `<label class="dropdown-item-checkbox text-white"><input type="checkbox" class="form-check-input me-2 member-check" value="${member}">${member}</label>`;
+                li.innerHTML = `
+                    <label class="dropdown-item-checkbox text-white">
+                        <input type="checkbox" class="form-check-input me-2 member-check" value="${member}">
+                        ${member}
+                    </label>`;
                 list.appendChild(li);
             });
             
+            // Populate Types
             const typeSelect = document.getElementById('evt-type');
             typeSelect.innerHTML = "";
             typeData.forEach(type => {
                 const opt = document.createElement("option");
-                opt.value = type.color; opt.innerText = type.name; opt.setAttribute('data-name', type.name);
+                opt.value = type.color; 
+                opt.innerText = type.name;
+                opt.setAttribute('data-name', type.name);
                 typeSelect.appendChild(opt);
             });
 
             if (event) {
+                // EDIT MODE
                 document.getElementById('eventModalTitle').innerText = "Edit Schedule Item";
                 document.getElementById('evt-id').value = event.id;
                 document.getElementById('evt-title').value = event.title;
@@ -380,12 +461,17 @@
                 if (typeOpt) typeSelect.value = typeOpt.value;
 
                 const members = event.extendedProps.members || [];
-                document.querySelectorAll('.member-check').forEach(box => { if (members.includes(box.value)) box.checked = true; });
+                document.querySelectorAll('.member-check').forEach(box => {
+                    if (members.includes(box.value)) box.checked = true;
+                });
 
+                // Set Dates
                 let displayEnd = new Date(event.end);
                 displayEnd.setDate(displayEnd.getDate() - 1);
                 fpInstance.setDate([event.start, displayEnd]);
+
             } else {
+                // NEW MODE
                 document.getElementById('eventModalTitle').innerText = "New Schedule Item";
                 document.getElementById('evt-id').value = "";
                 document.getElementById('evt-title').value = "";
@@ -393,8 +479,11 @@
                 fpInstance.clear();
             }
             
-            document.querySelectorAll('.member-check').forEach(box => box.addEventListener('change', updateSelectedCount));
+            document.querySelectorAll('.member-check').forEach(box => {
+                box.addEventListener('change', updateSelectedCount);
+            });
             updateSelectedCount();
+
             new bootstrap.Modal(document.getElementById('eventModal')).show();
         }
 
@@ -413,9 +502,10 @@
             const typeSelect = document.getElementById('evt-type');
             const color = typeSelect.value;
             const typeName = typeSelect.options[typeSelect.selectedIndex].getAttribute('data-name');
-            const selectedDates = fpInstance.selectedDates;
             
+            const selectedDates = fpInstance.selectedDates;
             if (!selectedDates || selectedDates.length < 2) return alert("Select Start & End Dates.");
+            
             const startStr = fpInstance.formatDate(selectedDates[0], "Y-m-d");
             let endDate = new Date(selectedDates[1]);
             endDate.setDate(endDate.getDate() + 1); 
@@ -426,11 +516,14 @@
 
             if (!title || selectedMembers.length === 0) return alert("Title and Members required.");
 
-            // Store data temporarily
+            // Store data temporarily in global variable
             pendingSaveData = {
                 id: id || crypto.randomUUID(),
-                title: title, start: startStr, end: endStr,
-                backgroundColor: color, borderColor: color,
+                title: title, 
+                start: startStr,
+                end: endStr,
+                backgroundColor: color,
+                borderColor: color,
                 extendedProps: { type: typeName, members: selectedMembers }
             };
 
@@ -440,7 +533,7 @@
             let conflicts = [];
 
             for (let event of scheduleData) {
-                if (id && event.id === id) continue; // Skip self
+                if (id && event.id === id) continue; // Skip self if editing
                 if (!event.start || !event.end) continue;
                 
                 const evStart = new Date(event.start);
@@ -489,6 +582,7 @@
             // Check update vs create
             const index = scheduleData.findIndex(e => e.id === eventObj.id);
             if (index > -1) {
+                // UPDATE
                 scheduleData[index] = eventObj;
                 const calEvent = calendar.getEventById(eventObj.id);
                 if (calEvent) {
@@ -500,6 +594,7 @@
                     calEvent.setExtendedProp('type', eventObj.extendedProps.type);
                 }
             } else {
+                // CREATE
                 scheduleData.push(eventObj);
                 calendar.addEvent(eventObj);
             }
@@ -512,85 +607,191 @@
         async function deleteEvent() {
             const id = document.getElementById('evt-id').value;
             if (!id || !confirm("Delete this item?")) return;
+
             const index = scheduleData.findIndex(e => e.id === id);
             if (index > -1) {
                 scheduleData.splice(index, 1);
                 const calEvent = calendar.getEventById(id);
                 if (calEvent) calEvent.remove();
+                
                 bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
                 scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
             }
         }
 
-        // --- MANAGERS ---
-        function openTeamManager() { cancelTeamEdit(); renderTeamList(); new bootstrap.Modal(document.getElementById('teamModal')).show(); }
+        // --- TEAM MANAGER ---
+        function openTeamManager() {
+            cancelTeamEdit();
+            renderTeamList();
+            new bootstrap.Modal(document.getElementById('teamModal')).show();
+        }
+
         function renderTeamList() {
-            const list = document.getElementById('team-list'); list.innerHTML = "";
+            const list = document.getElementById('team-list');
+            list.innerHTML = "";
             teamData.forEach((member, index) => {
                 const li = document.createElement("li");
                 li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
-                li.innerHTML = `<span>👤 ${member}</span> <div><button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditMember(${index})">✏️</button><button class="btn btn-sm btn-outline-danger btn-icon" onclick="removeMember(${index})">🗑️</button></div>`;
+                li.innerHTML = `
+                    <span>👤 ${member}</span> 
+                    <div>
+                        <button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditMember(${index})">✏️</button>
+                        <button class="btn btn-sm btn-outline-danger btn-icon" onclick="removeMember(${index})">🗑️</button>
+                    </div>`;
                 list.appendChild(li);
             });
         }
+
         function startEditMember(index) {
-            editingTeamIndex = index; document.getElementById('new-member-name').value = teamData[index];
-            document.getElementById('btn-team-submit').innerText = "Update"; document.getElementById('btn-team-submit').className = "btn btn-warning"; document.getElementById('btn-team-cancel').style.display = "inline-block";
+            editingTeamIndex = index;
+            document.getElementById('new-member-name').value = teamData[index];
+            document.getElementById('btn-team-submit').innerText = "Update";
+            document.getElementById('btn-team-submit').className = "btn btn-warning";
+            document.getElementById('btn-team-cancel').style.display = "inline-block";
         }
+
         function cancelTeamEdit() {
-            editingTeamIndex = -1; document.getElementById('new-member-name').value = "";
-            document.getElementById('btn-team-submit').innerText = "Add"; document.getElementById('btn-team-submit').className = "btn btn-success"; document.getElementById('btn-team-cancel').style.display = "none";
+            editingTeamIndex = -1;
+            document.getElementById('new-member-name').value = "";
+            document.getElementById('btn-team-submit').innerText = "Add";
+            document.getElementById('btn-team-submit').className = "btn btn-success";
+            document.getElementById('btn-team-cancel').style.display = "none";
         }
+
         async function handleMemberSubmit() {
             const name = document.getElementById('new-member-name').value.trim();
             if (!name) return;
+
             if (editingTeamIndex > -1) {
-                const oldName = teamData[editingTeamIndex]; teamData[editingTeamIndex] = name; teamData.sort();
+                const oldName = teamData[editingTeamIndex];
+                teamData[editingTeamIndex] = name;
+                teamData.sort();
+                
                 let scheduleChanged = false;
                 scheduleData.forEach(ev => {
                     let mems = (ev.extendedProps && ev.extendedProps.members) ? ev.extendedProps.members : [];
-                    if (mems.includes(oldName)) { ev.extendedProps.members = mems.map(m => m === oldName ? name : m); scheduleChanged = true; }
+                    if (mems.includes(oldName)) {
+                        ev.extendedProps.members = mems.map(m => m === oldName ? name : m);
+                        scheduleChanged = true;
+                    }
                 });
-                renderTeamList(); cancelTeamEdit(); teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
-                if (scheduleChanged) { scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha); initCalendar(); }
-            } else { if (!teamData.includes(name)) { teamData.push(name); teamData.sort(); renderTeamList(); document.getElementById('new-member-name').value = ""; teamSha = await saveFile(TEAM_FILE, teamData, teamSha); } }
-        }
-        async function removeMember(index) { if(confirm(`Remove ${teamData[index]}?`)) { teamData.splice(index, 1); renderTeamList(); teamSha = await saveFile(TEAM_FILE, teamData, teamSha); } }
 
-        function openTypeManager() { cancelTypeEdit(); renderTypeList(); new bootstrap.Modal(document.getElementById('typeModal')).show(); }
+                renderTeamList();
+                cancelTeamEdit();
+                
+                teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
+                if (scheduleChanged) {
+                    scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
+                    initCalendar();
+                }
+            } else {
+                if (!teamData.includes(name)) {
+                    teamData.push(name);
+                    teamData.sort();
+                    renderTeamList();
+                    document.getElementById('new-member-name').value = "";
+                    teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
+                }
+            }
+        }
+
+        async function removeMember(index) {
+            if(confirm(`Remove ${teamData[index]}?`)) {
+                teamData.splice(index, 1);
+                renderTeamList();
+                teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
+            }
+        }
+
+        // --- TYPE MANAGER ---
+        function openTypeManager() {
+            cancelTypeEdit();
+            renderTypeList();
+            new bootstrap.Modal(document.getElementById('typeModal')).show();
+        }
+
         function renderTypeList() {
-            const list = document.getElementById('type-list'); list.innerHTML = "";
+            const list = document.getElementById('type-list');
+            list.innerHTML = "";
             typeData.forEach((type, index) => {
                 const li = document.createElement("li");
                 li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
-                li.innerHTML = `<div class="d-flex align-items-center"><span class="color-swatch" style="background-color:${type.color};"></span><span>${type.name}</span></div><div><button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditType(${index})">✏️</button><button class="btn btn-sm btn-outline-danger btn-icon" onclick="removeType(${index})">🗑️</button></div>`;
+                li.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <span class="color-swatch" style="background-color:${type.color};"></span>
+                        <span>${type.name}</span>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditType(${index})">✏️</button>
+                        <button class="btn btn-sm btn-outline-danger btn-icon" onclick="removeType(${index})">🗑️</button>
+                    </div>`;
                 list.appendChild(li);
             });
         }
+
         function startEditType(index) {
-            editingTypeIndex = index; const type = typeData[index];
-            document.getElementById('new-type-name').value = type.name; document.getElementById('new-type-color').value = type.color;
-            document.getElementById('btn-type-submit').innerText = "Update"; document.getElementById('btn-type-submit').className = "btn btn-warning"; document.getElementById('btn-type-cancel').style.display = "inline-block";
+            editingTypeIndex = index;
+            const type = typeData[index];
+            document.getElementById('new-type-name').value = type.name;
+            document.getElementById('new-type-color').value = type.color;
+            document.getElementById('btn-type-submit').innerText = "Update";
+            document.getElementById('btn-type-submit').className = "btn btn-warning";
+            document.getElementById('btn-type-cancel').style.display = "inline-block";
         }
+
         function cancelTypeEdit() {
-            editingTypeIndex = -1; document.getElementById('new-type-name').value = ""; document.getElementById('new-type-color').value = "#0d6efd";
-            document.getElementById('btn-type-submit').innerText = "Add"; document.getElementById('btn-type-submit').className = "btn btn-success"; document.getElementById('btn-type-cancel').style.display = "none";
+            editingTypeIndex = -1;
+            document.getElementById('new-type-name').value = "";
+            document.getElementById('new-type-color').value = "#0d6efd";
+            document.getElementById('btn-type-submit').innerText = "Add";
+            document.getElementById('btn-type-submit').className = "btn btn-success";
+            document.getElementById('btn-type-cancel').style.display = "none";
         }
+
         async function handleTypeSubmit() {
-            const name = document.getElementById('new-type-name').value.trim(); const color = document.getElementById('new-type-color').value;
+            const name = document.getElementById('new-type-name').value.trim();
+            const color = document.getElementById('new-type-color').value;
             if (!name) return;
+
             if (editingTypeIndex > -1) {
-                const oldType = typeData[editingTypeIndex]; const oldName = oldType.name;
+                const oldType = typeData[editingTypeIndex];
+                const oldName = oldType.name;
                 typeData[editingTypeIndex] = { name: name, color: color };
+                
                 let scheduleChanged = false;
                 scheduleData.forEach(ev => {
-                    if (ev.extendedProps && ev.extendedProps.type === oldName) { ev.extendedProps.type = name; ev.backgroundColor = color; ev.borderColor = color; scheduleChanged = true; }
+                    if (ev.extendedProps && ev.extendedProps.type === oldName) {
+                        ev.extendedProps.type = name;
+                        ev.backgroundColor = color;
+                        ev.borderColor = color;
+                        scheduleChanged = true;
+                    }
                 });
-                renderTypeList(); cancelTypeEdit(); typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
-                if (scheduleChanged) { scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha); initCalendar(); }
-            } else { if (!typeData.some(t => t.name === name)) { typeData.push({ name: name, color: color }); renderTypeList(); document.getElementById('new-type-name').value = ""; typeSha = await saveFile(TYPES_FILE, typeData, typeSha); } }
+
+                renderTypeList();
+                cancelTypeEdit();
+                typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
+                if (scheduleChanged) {
+                    scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
+                    initCalendar();
+                }
+            } else {
+                if (!typeData.some(t => t.name === name)) {
+                    typeData.push({ name: name, color: color });
+                    renderTypeList();
+                    document.getElementById('new-type-name').value = "";
+                    typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
+                }
+            }
         }
-        async function removeType(index) { if(confirm(`Delete activity type "${typeData[index].name}"?`)) { typeData.splice(index, 1); renderTypeList(); typeSha = await saveFile(TYPES_FILE, typeData, typeSha); } }
+
+        async function removeType(index) {
+            if(confirm(`Delete activity type "${typeData[index].name}"?`)) {
+                typeData.splice(index, 1);
+                renderTypeList();
+                typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
+            }
+        }
     </script>
 </body>
 </html>
