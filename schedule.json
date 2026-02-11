@@ -4,10 +4,10 @@
     "title": "Taylor Farms Startup",
     "start": "2026-02-22",
     "end": "2026-02-25",
-    "backgroundColor": "#0007d6",
-    "borderColor": "#0007d6",
+    "backgroundColor": "#FF8C00",
+    "borderColor": "#FF8C00",
     "extendedProps": {
-      "type": "Panel Build",
+      "type": "Office Day",
       "members": [
         "Andrew Roberts",
         "Christopher Smith",
