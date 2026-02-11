@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler v2.1</title>
+    <title>Controls Team Scheduler v3.0</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -13,6 +13,10 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
     <style>
         body { background-color: #0e1117; color: white; padding-bottom: 80px; overflow: hidden; }
         
@@ -20,8 +24,12 @@
         .fc { height: 85vh; margin: 20px; }
         .fc-toolbar-title { font-size: 1.5rem !important; }
         .fc-event { cursor: pointer; border: none; }
-        .fc-daygrid-event { white-space: normal !important; } /* Wrap text */
         
+        /* Custom Event Content (Project + Members) */
+        .fc-event-main { padding: 4px; }
+        .event-title { font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 2px; }
+        .event-members { font-size: 0.75em; opacity: 0.9; display: block; line-height: 1.1; }
+
         /* Bottom Dock */
         .bottom-dock {
             position: fixed; bottom: 0; left: 0; width: 100%;
@@ -75,7 +83,7 @@
 
     <div id="app-container" style="display:none;">
         <div class="d-flex justify-content-between align-items-center px-4 pt-2">
-            <h5 class="text-muted">Controls & Automation Scheduler <span class="badge bg-success" style="font-size: 0.6em;">v2.1</span></h5>
+            <h5 class="text-muted">Controls & Automation Scheduler <span class="badge bg-primary" style="font-size: 0.6em;">v3.0</span></h5>
         </div>
 
         <div id="calendar"></div>
@@ -96,36 +104,28 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="text" id="evt-title" class="form-control mb-3 bg-dark text-white" placeholder="Project / Description">
+                    <label class="small text-muted mb-1">Project Name</label>
+                    <input type="text" id="evt-title" class="form-control mb-3 bg-dark text-white" placeholder="e.g. Line 4 Commissioning">
                     
                     <div class="row g-2 mb-3">
                         <div class="col-7">
-                            <label class="small text-muted">Assign Members</label>
+                            <label class="small text-muted mb-1">Assign Members</label>
                             <div class="dropdown">
                                 <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-white bg-dark" type="button" id="multiSelectBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside">
                                     Select Members...
                                 </button>
-                                <ul class="dropdown-menu w-100 bg-dark border-secondary scrollable-list" id="member-checkbox-list">
-                                    </ul>
+                                <ul class="dropdown-menu w-100 bg-dark border-secondary scrollable-list" id="member-checkbox-list"></ul>
                             </div>
                         </div>
                         <div class="col-5">
-                            <label class="small text-muted">Activity Type</label>
-                            <select id="evt-type" class="form-select bg-dark text-white">
-                                </select>
+                            <label class="small text-muted mb-1">Activity Type</label>
+                            <select id="evt-type" class="form-select bg-dark text-white"></select>
                         </div>
                     </div>
                     
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label class="small text-muted">Start Date</label>
-                            <input type="date" id="evt-start" class="form-control bg-dark text-white">
-                        </div>
-                        <div class="col-6">
-                            <label class="small text-muted">End Date</label>
-                            <input type="date" id="evt-end" class="form-control bg-dark text-white">
-                        </div>
-                    </div>
+                    <label class="small text-muted mb-1">Date Range</label>
+                    <input type="text" id="date-range-picker" class="form-control mb-4 bg-dark text-white" placeholder="Select dates...">
+
                     <button onclick="saveEvent()" class="btn btn-primary w-100">Save Item</button>
                 </div>
             </div>
@@ -145,7 +145,6 @@
                         <button onclick="handleMemberSubmit()" id="btn-team-submit" class="btn btn-success">Add</button>
                         <button onclick="cancelTeamEdit()" id="btn-team-cancel" class="btn btn-secondary" style="display:none;">✕</button>
                     </div>
-                    <p class="text-muted small">Current Team Members:</p>
                     <ul id="team-list" class="list-group list-group-flush scrollable-list"></ul>
                 </div>
             </div>
@@ -166,7 +165,6 @@
                         <button onclick="handleTypeSubmit()" id="btn-type-submit" class="btn btn-success">Add</button>
                         <button onclick="cancelTypeEdit()" id="btn-type-cancel" class="btn btn-secondary" style="display:none;">✕</button>
                     </div>
-                    <p class="text-muted small">Current Activities:</p>
                     <ul id="type-list" class="list-group list-group-flush scrollable-list"></ul>
                 </div>
             </div>
@@ -193,6 +191,7 @@
         // --- STATE ---
         let octokit = null;
         let calendar = null;
+        let fpInstance = null; // Flatpickr Instance
         let scheduleData = []; let scheduleSha = null;
         let teamData = []; let teamSha = null;
         let typeData = []; let typeSha = null;
@@ -208,9 +207,17 @@
                 document.getElementById('api-token').value = storedToken;
                 login();
             }
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('evt-start').value = today;
-            document.getElementById('evt-end').value = today;
+            
+            // Initialize Flatpickr (Range Mode)
+            fpInstance = flatpickr("#date-range-picker", {
+                mode: "range",
+                dateFormat: "Y-m-d",
+                theme: "dark",
+                minDate: "today",
+                onChange: function(selectedDates, dateStr, instance) {
+                    // Optional: Validation logic here
+                }
+            });
         });
 
         async function login() {
@@ -294,13 +301,25 @@
                 headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listMonth' },
                 events: scheduleData,
                 height: '80vh',
-                themeSystem: 'bootstrap5'
+                themeSystem: 'bootstrap5',
+                // CUSTOM RENDER: Show Project + Member List
+                eventContent: function(arg) {
+                    let members = arg.event.extendedProps.members || [];
+                    let memberString = members.join(", ");
+                    return {
+                        html: `<div>
+                                <span class="event-title">${arg.event.title}</span>
+                                <span class="event-members">${memberString}</span>
+                               </div>`
+                    };
+                }
             });
             calendar.render();
         }
 
-        // --- ADD/EDIT EVENTS ---
+        // --- ADD EVENT & MULTI-SELECT ---
         function openAddEventModal() {
+            // Populate Members
             const list = document.getElementById('member-checkbox-list');
             list.innerHTML = "";
             teamData.forEach(member => {
@@ -317,6 +336,7 @@
                 box.addEventListener('change', updateSelectedCount);
             });
 
+            // Populate Types
             const typeSelect = document.getElementById('evt-type');
             typeSelect.innerHTML = "";
             typeData.forEach(type => {
@@ -326,6 +346,9 @@
                 opt.setAttribute('data-name', type.name);
                 typeSelect.appendChild(opt);
             });
+            
+            // Clear Date Picker
+            fpInstance.clear();
 
             new bootstrap.Modal(document.getElementById('addEventModal')).show();
         }
@@ -343,42 +366,74 @@
             const typeSelect = document.getElementById('evt-type');
             const color = typeSelect.value;
             const typeName = typeSelect.options[typeSelect.selectedIndex].getAttribute('data-name');
-            const start = document.getElementById('evt-start').value;
-            let end = document.getElementById('evt-end').value;
+            
+            // Get Date Range from Flatpickr
+            const selectedDates = fpInstance.selectedDates;
+            if (selectedDates.length < 2) return alert("Please select a date range (Start & End).");
+            
+            // Format Dates
+            // FullCalendar needs inclusive start, exclusive end. Flatpickr gives us both inclusive.
+            // We need to add 1 day to the end date for FullCalendar to render it correctly.
+            const startStr = fpInstance.formatDate(selectedDates[0], "Y-m-d");
+            let endDate = new Date(selectedDates[1]);
+            endDate.setDate(endDate.getDate() + 1); 
+            const endStr = endDate.toISOString().split('T')[0];
 
+            // Get Members
             const checkboxes = document.querySelectorAll('.member-check:checked');
             const selectedMembers = Array.from(checkboxes).map(cb => cb.value);
 
-            if (!title || !start || !end || selectedMembers.length === 0) {
-                return alert("Please fill title, dates, and select at least one member.");
+            if (!title || selectedMembers.length === 0) {
+                return alert("Please fill title and select at least one member.");
             }
             
-            let endDateObj = new Date(end);
-            endDateObj.setDate(endDateObj.getDate() + 1);
-            const adjEnd = endDateObj.toISOString().split('T')[0];
+            // CONFLICT CHECK (Group Logic)
+            // Check if ANY selected member is busy during this time
+            let conflictMsg = "";
+            const newStart = new Date(startStr);
+            const newEnd = new Date(endStr);
 
-            const newEvents = [];
-            selectedMembers.forEach(member => {
-                newEvents.push({
-                    title: `${member}: ${title}`, 
-                    start: start,
-                    end: adjEnd,
-                    backgroundColor: color,
-                    borderColor: color,
-                    resourceId: member,
-                    extendedProps: { type: typeName }
-                });
-            });
+            for (let event of scheduleData) {
+                const evStart = new Date(event.start);
+                const evEnd = new Date(event.end);
+                
+                // Check Date Overlap
+                if (newStart < evEnd && newEnd > evStart) {
+                    // Check Member Overlap
+                    const existingMembers = event.extendedProps.members || [];
+                    const overlaps = selectedMembers.filter(m => existingMembers.includes(m));
+                    
+                    if (overlaps.length > 0) {
+                        conflictMsg = `Conflict! ${overlaps.join(", ")} is already busy with "${event.title}".`;
+                        break;
+                    }
+                }
+            }
 
-            newEvents.forEach(ev => calendar.addEvent(ev));
+            if (conflictMsg) return alert(conflictMsg);
+
+            // CREATE SINGLE GROUP EVENT
+            const newEvent = {
+                title: title, 
+                start: startStr,
+                end: endStr,
+                backgroundColor: color,
+                borderColor: color,
+                extendedProps: { 
+                    type: typeName,
+                    members: selectedMembers // Store list of people
+                }
+            };
+
+            calendar.addEvent(newEvent);
             bootstrap.Modal.getInstance(document.getElementById('addEventModal')).hide();
-            scheduleData.push(...newEvents);
+            scheduleData.push(newEvent);
             scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
         }
 
-        // --- TEAM MANAGER (ADD & EDIT) ---
+        // --- TEAM MANAGER ---
         function openTeamManager() {
-            cancelTeamEdit(); // Reset state
+            cancelTeamEdit();
             renderTeamList();
             new bootstrap.Modal(document.getElementById('teamModal')).show();
         }
@@ -420,35 +475,31 @@
             if (!name) return;
 
             if (editingTeamIndex > -1) {
-                // UPDATE EXISTING
+                // Update Logic
                 const oldName = teamData[editingTeamIndex];
-                
-                // 1. Update List
                 teamData[editingTeamIndex] = name;
                 teamData.sort();
                 
-                // 2. Cascade Update to Schedule Events
+                // Update Group Events
                 let scheduleChanged = false;
                 scheduleData.forEach(ev => {
-                    if (ev.resourceId === oldName) {
-                        ev.resourceId = name;
-                        // Attempt to fix title "Carson: Project X" -> "NewName: Project X"
-                        ev.title = ev.title.replace(oldName, name);
+                    let mems = ev.extendedProps.members || [];
+                    if (mems.includes(oldName)) {
+                        // Replace old name with new name
+                        ev.extendedProps.members = mems.map(m => m === oldName ? name : m);
                         scheduleChanged = true;
                     }
                 });
 
                 renderTeamList();
                 cancelTeamEdit();
-                
-                // 3. Save Both Files
                 teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
                 if (scheduleChanged) {
                     scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
-                    initCalendar(); // Refresh calendar to show new names
+                    initCalendar();
                 }
             } else {
-                // ADD NEW
+                // Add Logic
                 if (!teamData.includes(name)) {
                     teamData.push(name); teamData.sort();
                     renderTeamList();
@@ -465,9 +516,9 @@
             }
         }
 
-        // --- TYPE MANAGER (ADD & EDIT) ---
+        // --- TYPE MANAGER ---
         function openTypeManager() {
-            cancelTypeEdit(); // Reset state
+            cancelTypeEdit();
             renderTypeList();
             new bootstrap.Modal(document.getElementById('typeModal')).show();
         }
@@ -516,14 +567,10 @@
             if (!name) return;
 
             if (editingTypeIndex > -1) {
-                // UPDATE EXISTING
                 const oldType = typeData[editingTypeIndex];
                 const oldName = oldType.name;
-
-                // 1. Update List
                 typeData[editingTypeIndex] = { name: name, color: color };
                 
-                // 2. Cascade Update to Schedule Events
                 let scheduleChanged = false;
                 scheduleData.forEach(ev => {
                     if (ev.extendedProps.type === oldName) {
@@ -536,16 +583,12 @@
 
                 renderTypeList();
                 cancelTypeEdit();
-
-                // 3. Save Both Files
                 typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
                 if (scheduleChanged) {
                     scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
-                    initCalendar(); // Refresh calendar colors
+                    initCalendar();
                 }
-
             } else {
-                // ADD NEW
                 if (!typeData.some(t => t.name === name)) {
                     typeData.push({ name: name, color: color });
                     renderTypeList();
