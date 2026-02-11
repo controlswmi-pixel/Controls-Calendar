@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler v3.3</title>
+    <title>Controls Team Scheduler v4.0</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -23,7 +23,8 @@
         /* Calendar Styling */
         .fc { height: 85vh; margin: 20px; }
         .fc-toolbar-title { font-size: 1.5rem !important; }
-        .fc-event { cursor: pointer; border: none; }
+        .fc-event { cursor: pointer; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .fc-event:hover { filter: brightness(1.1); }
         
         /* Event Content */
         .fc-event-main { padding: 4px; }
@@ -64,6 +65,9 @@
         
         .color-swatch { display: inline-block; width: 15px; height: 15px; border-radius: 3px; margin-right: 8px; }
         .btn-icon { padding: 2px 6px; margin-left: 5px; }
+
+        /* Spinner */
+        #loading-spinner { display: none; margin-left: 10px; }
     </style>
 </head>
 <body>
@@ -79,28 +83,32 @@
 
     <div id="app-container" style="display:none;">
         <div class="d-flex justify-content-between align-items-center px-4 pt-2">
-            <h5 class="text-muted">Controls & Automation Scheduler <span class="badge bg-success" style="font-size: 0.6em;">v3.3</span></h5>
+            <h5 class="text-muted">
+                Controls & Automation Scheduler 
+                <span class="badge bg-primary" style="font-size: 0.6em;">v4.0</span>
+                <span id="loading-spinner" class="spinner-border spinner-border-sm text-primary" role="status"></span>
+            </h5>
         </div>
 
         <div id="calendar"></div>
         
         <div class="bottom-dock">
-            <button class="dock-btn" onclick="openAddEventModal()">➕ Add Item</button>
+            <button class="dock-btn" onclick="openEventModal()">➕ Add Item</button>
             <button class="dock-btn" onclick="openTeamManager()">👥 Team</button>
             <button class="dock-btn" onclick="openTypeManager()">🎨 Types</button>
             <button class="dock-btn" onclick="location.reload()">🔄 Refresh</button>
         </div>
     </div>
 
-    <div class="modal fade" id="addEventModal" tabindex="-1">
+    <div class="modal fade" id="eventModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content bg-dark text-white">
                 <div class="modal-header border-secondary">
-                    <h5 class="modal-title">New Schedule Item</h5>
+                    <h5 class="modal-title" id="eventModalTitle">Schedule Item</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <label class="small text-muted mb-1">Project Name</label>
+                    <input type="hidden" id="evt-id"> <label class="small text-muted mb-1">Project Name</label>
                     <input type="text" id="evt-title" class="form-control mb-3 bg-dark text-white" placeholder="e.g. Line 4 Commissioning">
                     
                     <div class="row g-2 mb-3">
@@ -122,7 +130,10 @@
                     <label class="small text-muted mb-1">Date Range</label>
                     <input type="text" id="date-range-picker" class="form-control mb-4 bg-dark text-white" placeholder="Select dates...">
 
-                    <button onclick="saveEvent()" class="btn btn-primary w-100">Save Item</button>
+                    <div class="d-flex gap-2">
+                        <button onclick="saveEvent()" class="btn btn-primary flex-grow-1">Save Item</button>
+                        <button onclick="deleteEvent()" id="btn-delete-event" class="btn btn-danger" style="display:none;">Delete</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -175,7 +186,6 @@
         const TEAM_FILE = "team.json";
         const TYPES_FILE = "types.json"; 
         
-        // --- DEFAULT DATA ---
         const DEFAULT_TYPES = [
             { name: "Panel Build", color: "#0078D4" },
             { name: "Vacation", color: "#107C10" },
@@ -217,7 +227,6 @@
                 const { Octokit } = window;
                 octokit = new Octokit({ auth: token });
                 const user = await octokit.request('GET /user');
-                console.log("Logged in as:", user.data.login);
                 localStorage.setItem('gh_token', token);
                 document.getElementById('login-overlay').style.display = 'none';
                 document.getElementById('app-container').style.display = 'block';
@@ -229,22 +238,31 @@
         }
 
         async function initApp() {
+            showSpinner();
             await Promise.all([loadTeam(), loadTypes(), loadSchedule()]);
+            // Legacy Migration: Assign UUIDs to old events
+            let migrationNeeded = false;
+            scheduleData.forEach(ev => {
+                if (!ev.id) {
+                    ev.id = crypto.randomUUID();
+                    migrationNeeded = true;
+                }
+            });
+            if (migrationNeeded) {
+                scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
+            }
+            hideSpinner();
             initCalendar();
         }
 
-        // --- GITHUB API HELPERS ---
-        function utf8_to_b64(str) {
-            return window.btoa(unescape(encodeURIComponent(str)));
-        }
-
-        function b64_to_utf8(str) {
-            try {
-                return decodeURIComponent(escape(window.atob(str)));
-            } catch (e) {
-                // Fallback for files not encoded with this method previously
-                return window.atob(str);
-            }
+        // --- GITHUB HELPERS ---
+        function showSpinner() { document.getElementById('loading-spinner').style.display = 'inline-block'; }
+        function hideSpinner() { document.getElementById('loading-spinner').style.display = 'none'; }
+        
+        function utf8_to_b64(str) { return window.btoa(unescape(encodeURIComponent(str))); }
+        function b64_to_utf8(str) { 
+            try { return decodeURIComponent(escape(window.atob(str))); } 
+            catch (e) { return window.atob(str); } 
         }
 
         async function getFile(filename) {
@@ -262,64 +280,52 @@
             }
         }
 
-        // --- SELF-HEALING SAVE FUNCTION ---
         async function saveFile(filename, content, sha) {
-            // 1. If we don't have a SHA, verify if file exists on server to prevent overwrite errors
+            showSpinner();
             if (!sha) {
                 try {
                     const check = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, {
                         owner: REPO_OWNER, repo: REPO_NAME, path: filename
                     });
-                    console.log("Found existing file SHA:", check.data.sha);
                     sha = check.data.sha;
-                } catch (e) {
-                    console.log("File likely doesn't exist yet, proceeding with create.");
-                }
+                } catch (e) {}
             }
-
+            
             const params = {
-                owner: REPO_OWNER, 
-                repo: REPO_NAME, 
-                path: filename,
+                owner: REPO_OWNER, repo: REPO_NAME, path: filename,
                 message: "Update via Web App",
                 content: utf8_to_b64(JSON.stringify(content, null, 2))
             };
-
-            // Only include SHA if we found one
-            if (sha) {
-                params.sha = sha;
-            }
+            if (sha) params.sha = sha;
 
             try {
                 const response = await octokit.request(`PUT /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, params);
+                hideSpinner();
                 return response.data.content.sha;
             } catch (e) {
-                const msg = e.response ? e.response.data.message : e.message;
-                alert("GitHub Save Error: " + msg);
+                hideSpinner();
+                alert("Save Error: " + e.message);
                 throw e;
             }
         }
 
-        // --- DATA LOADING ---
         async function loadTeam() {
             const data = await getFile(TEAM_FILE);
             teamData = data.content || ["Carson", "Dave Miller"];
             teamSha = data.sha;
         }
-
         async function loadTypes() {
             const data = await getFile(TYPES_FILE);
             typeData = data.content || DEFAULT_TYPES;
             typeSha = data.sha;
         }
-
         async function loadSchedule() {
             const data = await getFile(SCHEDULE_FILE);
             scheduleData = data.content || [];
             scheduleSha = data.sha;
         }
 
-        // --- CALENDAR ---
+        // --- CALENDAR LOGIC ---
         function initCalendar() {
             const calendarEl = document.getElementById('calendar');
             calendar = new FullCalendar.Calendar(calendarEl, {
@@ -328,6 +334,25 @@
                 events: scheduleData,
                 height: '80vh',
                 themeSystem: 'bootstrap5',
+                editable: true, // ENABLE DRAG & DROP
+                droppable: true,
+                eventResizableFromStart: true,
+                
+                // EVENT CLICK (EDIT)
+                eventClick: function(info) {
+                    openEventModal(info.event);
+                },
+
+                // DRAG & DROP SAVE
+                eventDrop: async function(info) {
+                    await handleDragResize(info.event);
+                },
+
+                // RESIZE SAVE
+                eventResize: async function(info) {
+                    await handleDragResize(info.event);
+                },
+
                 eventContent: function(arg) {
                     let members = [];
                     if (arg.event.extendedProps && arg.event.extendedProps.members) {
@@ -335,7 +360,6 @@
                     } else if (arg.event.resourceId) {
                         members = [arg.event.resourceId];
                     }
-                    
                     let memberString = members.join(", ");
                     return {
                         html: `<div>
@@ -348,8 +372,21 @@
             calendar.render();
         }
 
-        // --- ADD EVENT ---
-        function openAddEventModal() {
+        async function handleDragResize(event) {
+            // Find event in array and update dates
+            const index = scheduleData.findIndex(e => e.id === event.id);
+            if (index > -1) {
+                // FullCalendar uses Date objects, convert back to YYYY-MM-DD string
+                // Note: end date is exclusive in FC, so we store it as is (logic aligns with V3)
+                scheduleData[index].start = event.startStr;
+                scheduleData[index].end = event.endStr;
+                scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
+            }
+        }
+
+        // --- ADD/EDIT EVENT MODAL ---
+        function openEventModal(event = null) {
+            // Populate Dropdowns
             const list = document.getElementById('member-checkbox-list');
             list.innerHTML = "";
             teamData.forEach(member => {
@@ -361,11 +398,7 @@
                     </label>`;
                 list.appendChild(li);
             });
-            updateSelectedCount();
-            document.querySelectorAll('.member-check').forEach(box => {
-                box.addEventListener('change', updateSelectedCount);
-            });
-
+            
             const typeSelect = document.getElementById('evt-type');
             typeSelect.innerHTML = "";
             typeData.forEach(type => {
@@ -375,9 +408,48 @@
                 opt.setAttribute('data-name', type.name);
                 typeSelect.appendChild(opt);
             });
+
+            // Logic: Create New vs Edit Existing
+            if (event) {
+                // EDIT MODE
+                document.getElementById('eventModalTitle').innerText = "Edit Schedule Item";
+                document.getElementById('evt-id').value = event.id;
+                document.getElementById('evt-title').value = event.title;
+                document.getElementById('btn-delete-event').style.display = "block";
+                
+                // Set Type
+                const typeName = event.extendedProps.type;
+                const typeOpt = Array.from(typeSelect.options).find(opt => opt.getAttribute('data-name') === typeName);
+                if (typeOpt) typeSelect.value = typeOpt.value;
+
+                // Set Members
+                const members = event.extendedProps.members || [];
+                document.querySelectorAll('.member-check').forEach(box => {
+                    if (members.includes(box.value)) box.checked = true;
+                });
+
+                // Set Dates
+                // FC end date is exclusive, Flatpickr is inclusive. Subtract 1 day for display.
+                let displayEnd = new Date(event.end);
+                displayEnd.setDate(displayEnd.getDate() - 1);
+                fpInstance.setDate([event.start, displayEnd]);
+
+            } else {
+                // CREATE MODE
+                document.getElementById('eventModalTitle').innerText = "New Schedule Item";
+                document.getElementById('evt-id').value = "";
+                document.getElementById('evt-title').value = "";
+                document.getElementById('btn-delete-event').style.display = "none";
+                fpInstance.clear();
+            }
             
-            fpInstance.clear();
-            new bootstrap.Modal(document.getElementById('addEventModal')).show();
+            // Listeners
+            document.querySelectorAll('.member-check').forEach(box => {
+                box.addEventListener('change', updateSelectedCount);
+            });
+            updateSelectedCount();
+
+            new bootstrap.Modal(document.getElementById('eventModal')).show();
         }
 
         function updateSelectedCount() {
@@ -389,53 +461,48 @@
         }
 
         async function saveEvent() {
+            const id = document.getElementById('evt-id').value;
             const title = document.getElementById('evt-title').value;
             const typeSelect = document.getElementById('evt-type');
             const color = typeSelect.value;
             const typeName = typeSelect.options[typeSelect.selectedIndex].getAttribute('data-name');
             
             const selectedDates = fpInstance.selectedDates;
-            if (!selectedDates || selectedDates.length < 2) return alert("Please select a date range (Start & End).");
+            if (!selectedDates || selectedDates.length < 2) return alert("Select Start & End Dates.");
             
             const startStr = fpInstance.formatDate(selectedDates[0], "Y-m-d");
             let endDate = new Date(selectedDates[1]);
-            endDate.setDate(endDate.getDate() + 1); 
+            endDate.setDate(endDate.getDate() + 1); // +1 for FC exclusive
             const endStr = endDate.toISOString().split('T')[0];
 
             const checkboxes = document.querySelectorAll('.member-check:checked');
             const selectedMembers = Array.from(checkboxes).map(cb => cb.value);
 
-            if (!title || selectedMembers.length === 0) {
-                return alert("Please fill title and select at least one member.");
-            }
-            
-            // CONFLICT CHECK
-            let conflictMsg = "";
+            if (!title || selectedMembers.length === 0) return alert("Title and Members required.");
+
+            // CONFLICT CHECK (Skip checking against self if editing)
             const newStart = new Date(startStr);
             const newEnd = new Date(endStr);
-            const currentSchedule = scheduleData || [];
+            let conflictMsg = "";
 
-            for (let event of currentSchedule) {
+            for (let event of scheduleData) {
+                if (id && event.id === id) continue; // Skip self
                 if (!event.start || !event.end) continue;
+                
                 const evStart = new Date(event.start);
                 const evEnd = new Date(event.end);
                 
                 if (newStart < evEnd && newEnd > evStart) {
-                    if (event.extendedProps && event.extendedProps.members) {
-                        const existingGroup = event.extendedProps.members;
-                        const overlap = selectedMembers.find(m => existingGroup.includes(m));
-                        if (overlap) { conflictMsg = `Conflict! ${overlap} is already busy with "${event.title}".`; break; }
-                    } else if (event.resourceId) {
-                         if (selectedMembers.includes(event.resourceId)) {
-                             conflictMsg = `Conflict! ${event.resourceId} is already busy with "${event.title}".`; break;
-                         }
-                    }
+                    const existingGroup = event.extendedProps.members || [];
+                    const overlap = selectedMembers.find(m => existingGroup.includes(m));
+                    if (overlap) { conflictMsg = `Conflict! ${overlap} is busy with "${event.title}".`; break; }
                 }
             }
+            if (conflictMsg && !confirm(conflictMsg + "\n\nSave anyway?")) return;
 
-            if (conflictMsg) return alert(conflictMsg);
-
-            const newEvent = {
+            // Object Construction
+            const eventObj = {
+                id: id || crypto.randomUUID(),
                 title: title, 
                 start: startStr,
                 end: endStr,
@@ -444,19 +511,51 @@
                 extendedProps: { type: typeName, members: selectedMembers }
             };
 
-            calendar.addEvent(newEvent);
-            bootstrap.Modal.getInstance(document.getElementById('addEventModal')).hide();
-            scheduleData.push(newEvent);
+            if (id) {
+                // UPDATE
+                const index = scheduleData.findIndex(e => e.id === id);
+                if (index > -1) scheduleData[index] = eventObj;
+                // Update Calendar UI
+                const calEvent = calendar.getEventById(id);
+                if (calEvent) {
+                    calEvent.setProp('title', title);
+                    calEvent.setProp('backgroundColor', color);
+                    calEvent.setProp('borderColor', color);
+                    calEvent.setDates(startStr, endStr);
+                    calEvent.setExtendedProp('members', selectedMembers);
+                    calEvent.setExtendedProp('type', typeName);
+                }
+            } else {
+                // CREATE
+                scheduleData.push(eventObj);
+                calendar.addEvent(eventObj);
+            }
+
+            bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
             scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
         }
 
-        // --- TEAM MANAGER ---
-        function openTeamManager() {
-            cancelTeamEdit();
-            renderTeamList();
-            new bootstrap.Modal(document.getElementById('teamModal')).show();
+        async function deleteEvent() {
+            const id = document.getElementById('evt-id').value;
+            if (!id) return;
+            if (!confirm("Are you sure you want to delete this item?")) return;
+
+            const index = scheduleData.findIndex(e => e.id === id);
+            if (index > -1) {
+                scheduleData.splice(index, 1);
+                const calEvent = calendar.getEventById(id);
+                if (calEvent) calEvent.remove();
+                
+                bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
+                scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
+            }
         }
 
+        // --- TEAM & TYPE MANAGERS (Same as v3, cleaned up) ---
+        function openTeamManager() {
+            cancelTeamEdit(); renderTeamList();
+            new bootstrap.Modal(document.getElementById('teamModal')).show();
+        }
         function renderTeamList() {
             const list = document.getElementById('team-list');
             list.innerHTML = "";
@@ -467,7 +566,6 @@
                 list.appendChild(li);
             });
         }
-
         function startEditMember(index) {
             editingTeamIndex = index;
             document.getElementById('new-member-name').value = teamData[index];
@@ -475,7 +573,6 @@
             document.getElementById('btn-team-submit').className = "btn btn-warning";
             document.getElementById('btn-team-cancel').style.display = "inline-block";
         }
-
         function cancelTeamEdit() {
             editingTeamIndex = -1;
             document.getElementById('new-member-name').value = "";
@@ -483,14 +580,12 @@
             document.getElementById('btn-team-submit').className = "btn btn-success";
             document.getElementById('btn-team-cancel').style.display = "none";
         }
-
         async function handleMemberSubmit() {
             const name = document.getElementById('new-member-name').value.trim();
             if (!name) return;
             if (editingTeamIndex > -1) {
                 const oldName = teamData[editingTeamIndex];
                 teamData[editingTeamIndex] = name; teamData.sort();
-                
                 let scheduleChanged = false;
                 scheduleData.forEach(ev => {
                     let mems = (ev.extendedProps && ev.extendedProps.members) ? ev.extendedProps.members : [];
@@ -513,7 +608,6 @@
                 }
             }
         }
-
         async function removeMember(index) {
             if(confirm(`Remove ${teamData[index]}?`)) {
                 teamData.splice(index, 1); renderTeamList();
@@ -521,12 +615,10 @@
             }
         }
 
-        // --- TYPE MANAGER ---
         function openTypeManager() {
             cancelTypeEdit(); renderTypeList();
             new bootstrap.Modal(document.getElementById('typeModal')).show();
         }
-
         function renderTypeList() {
             const list = document.getElementById('type-list');
             list.innerHTML = "";
@@ -537,7 +629,6 @@
                 list.appendChild(li);
             });
         }
-
         function startEditType(index) {
             editingTypeIndex = index;
             const type = typeData[index];
@@ -547,7 +638,6 @@
             document.getElementById('btn-type-submit').className = "btn btn-warning";
             document.getElementById('btn-type-cancel').style.display = "inline-block";
         }
-
         function cancelTypeEdit() {
             editingTypeIndex = -1;
             document.getElementById('new-type-name').value = "";
@@ -556,7 +646,6 @@
             document.getElementById('btn-type-submit').className = "btn btn-success";
             document.getElementById('btn-type-cancel').style.display = "none";
         }
-
         async function handleTypeSubmit() {
             const name = document.getElementById('new-type-name').value.trim();
             const color = document.getElementById('new-type-color').value;
@@ -565,7 +654,6 @@
                 const oldType = typeData[editingTypeIndex];
                 const oldName = oldType.name;
                 typeData[editingTypeIndex] = { name: name, color: color };
-                
                 let scheduleChanged = false;
                 scheduleData.forEach(ev => {
                     if (ev.extendedProps && ev.extendedProps.type === oldName) {
@@ -588,7 +676,6 @@
                 }
             }
         }
-
         async function removeType(index) {
             if(confirm(`Delete activity type "${typeData[index].name}"?`)) {
                 typeData.splice(index, 1); renderTypeList();
