@@ -24,59 +24,52 @@ CATEGORY_COLORS = {
     "Maintenance": "#881798"       # Purple
 }
 
-# --- 1. Global Page CSS (Layout & Sidebar) ---
+# --- CSS: Layout & Text Wrapping ---
 def inject_page_css():
     st.markdown("""
         <style>
-            /* Maximize main content area */
+            /* 1. Maximize Main View */
             .block-container {
-                padding-top: 0.5rem !important;
+                padding-top: 1rem !important;
                 padding-bottom: 0rem !important;
-                padding-left: 1rem !important;
-                padding-right: 1rem !important;
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
                 max-width: 100% !important;
             }
             
-            /* Hide Streamlit Header & Footer */
+            /* 2. Hide Streamlit Elements */
             header {visibility: hidden;}
             footer {visibility: hidden;}
-            #MainMenu {visibility: hidden;}
             
-            /* Sidebar styling */
+            /* 3. Sidebar Styling */
             [data-testid="stSidebar"] {
                 min-width: 350px;
                 max-width: 350px;
+                background-color: #f8f9fa; /* Light contrast */
             }
             
-            /* Sidebar Form styling */
-            [data-testid="stForm"] {
-                border: 1px solid #444;
-                padding: 20px;
-                border-radius: 10px;
+            /* 4. Calendar Text Wrapping (Fixes the "..." issue) */
+            .fc-event-title {
+                white-space: normal !important;
+                overflow: hidden !important;
+                text-overflow: clip !important;
+                font-size: 0.85rem !important;
+            }
+            
+            /* 5. Custom Button Styling */
+            div.stButton > button {
+                width: 100%;
+                background-color: #0078D4;
+                color: white;
+                border: none;
+                padding: 10px;
+            }
+            div.stButton > button:hover {
+                background-color: #005a9e;
+                color: white;
             }
         </style>
     """, unsafe_allow_html=True)
-
-# --- 2. Calendar Component CSS (The Fix for Height) ---
-CALENDAR_CSS = """
-    /* Force the calendar container to take up 85% of the viewport height */
-    .fc {
-        height: 85vh !important;
-    }
-    
-    /* Improve the look of the event bars */
-    .fc-event {
-        cursor: pointer;
-        padding: 2px 4px;
-        font-size: 0.9rem;
-        border: none !important;
-    }
-    
-    /* Ensure the grid cells stretch to fill the height */
-    .fc-view-harness {
-        height: 100% !important;
-    }
-"""
 
 def load_data_from_github():
     try:
@@ -112,35 +105,32 @@ inject_page_css()
 # Load Data
 schedule_data, file_sha = load_data_from_github()
 
-# --- Sidebar: Form ---
+# --- Sidebar ---
 with st.sidebar:
-    st.markdown("### 📅 Scheduler")
+    st.markdown("### 📅 Team Scheduler")
+    st.markdown("---")
     
     with st.form("add_event_form", clear_on_submit=True):
-        st.caption("Create New Entry")
+        st.markdown("**1. Project Details**")
+        title = st.text_input("Description", placeholder="e.g. Line 4 Commissioning")
         
-        # 1. Title
-        title = st.text_input("Project / Item Name", placeholder="e.g. Line 4 Commissioning")
+        c_assign, c_type = st.columns([1.5, 1])
+        assignee = c_assign.selectbox("Assignee", TEAM_MEMBERS)
+        category = c_type.selectbox("Type", list(CATEGORY_COLORS.keys()))
         
-        # 2. Assignee & Type
-        assignee = st.selectbox("Assignee", TEAM_MEMBERS)
-        category = st.selectbox("Activity Type", list(CATEGORY_COLORS.keys()))
+        st.markdown("---")
+        st.markdown("**2. Duration**")
         
-        st.write("") 
-        
-        # 3. Dates
-        c1, c2 = st.columns(2)
-        start_date = c1.date_input("Start", value="today")
-        end_date = c2.date_input("End", value="today")
+        c_start, c_end = st.columns(2)
+        start_date = c_start.date_input("Start", value="today")
+        end_date = c_end.date_input("End", value="today")
         
         st.write("")
-        
-        # 4. Submit
-        submitted = st.form_submit_button("Add to Schedule", use_container_width=True)
+        submitted = st.form_submit_button("Add Entry")
         
         if submitted:
             if start_date > end_date:
-                st.error("End date must be after start date.")
+                st.error("Invalid dates.")
             else:
                 adjusted_end = end_date + timedelta(days=1)
                 new_event = {
@@ -155,14 +145,14 @@ with st.sidebar:
                 
                 conflicts = check_conflicts(new_event, schedule_data)
                 if conflicts:
-                    st.error(f"Conflict: {assignee} is already booked!")
+                    st.error(f"Conflict detected for {assignee}!")
                 else:
                     schedule_data.append(new_event)
                     save_data_to_github(schedule_data, file_sha)
                     st.success("Added!")
                     st.rerun()
 
-# --- Main Calendar View ---
+# --- Calendar View ---
 calendar_options = {
     "headerToolbar": {
         "left": "today prev,next",
@@ -173,12 +163,11 @@ calendar_options = {
     "selectable": True,
     "editable": False,
     "navLinks": True,
-    # We remove the height setting here and rely on custom_css below
+    
+    # FIX: Robust Height Setting
+    "height": "750px",       # Fixed pixel height guarantees it won't disappear
+    "expandRows": True,      # Stretches rows to fill that 750px
+    "handleWindowResize": True,
 }
 
-# Pass the custom CSS directly to the component
-calendar(
-    events=schedule_data, 
-    options=calendar_options, 
-    custom_css=CALENDAR_CSS
-)
+calendar(events=schedule_data, options=calendar_options)
