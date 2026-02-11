@@ -28,27 +28,27 @@ CATEGORY_COLORS = {
 def inject_custom_css():
     st.markdown("""
         <style>
-            /* 1. maximize main content area */
+            /* 1. Maximize main content area */
             .block-container {
-                padding-top: 1rem !important;
+                padding-top: 0.5rem !important; /* Reduced further to push it up */
                 padding-bottom: 0rem !important;
                 padding-left: 1rem !important;
                 padding-right: 1rem !important;
                 max-width: 100% !important;
             }
             
-            /* 2. Hide Streamlit Header & Footer to remove dead space */
+            /* 2. Hide Streamlit Header & Footer */
             header {visibility: hidden;}
             footer {visibility: hidden;}
             #MainMenu {visibility: hidden;}
             
-            /* 3. Make Sidebar wider and cleaner */
+            /* 3. Sidebar styling */
             [data-testid="stSidebar"] {
                 min-width: 350px;
                 max-width: 350px;
             }
             
-            /* 4. Tweak form styling */
+            /* 4. Form styling */
             [data-testid="stForm"] {
                 border: 1px solid #444;
                 padding: 20px;
@@ -98,23 +98,23 @@ with st.sidebar:
     with st.form("add_event_form", clear_on_submit=True):
         st.caption("Create New Entry")
         
-        # 1. Title (Full Width)
+        # 1. Title
         title = st.text_input("Project / Item Name", placeholder="e.g. Line 4 Commissioning")
         
-        # 2. Assignee & Type (Full Width - Stacked to prevent cutting off text)
+        # 2. Assignee & Type
         assignee = st.selectbox("Assignee", TEAM_MEMBERS)
         category = st.selectbox("Activity Type", list(CATEGORY_COLORS.keys()))
         
-        st.write("") # Spacer
+        st.write("") 
         
-        # 3. Dates (Side by Side - these are short enough)
+        # 3. Dates
         c1, c2 = st.columns(2)
         start_date = c1.date_input("Start", value="today")
         end_date = c2.date_input("End", value="today")
         
-        st.write("") # Spacer
+        st.write("")
         
-        # 4. Submit Button
+        # 4. Submit
         submitted = st.form_submit_button("Add to Schedule", use_container_width=True)
         
         if submitted:
@@ -152,8 +152,11 @@ calendar_options = {
     "selectable": True,
     "editable": False,
     "navLinks": True,
-    # Height is now 90% of the viewport height to fill the empty bottom space
-    "height": "90vh", 
+    
+    # --- VISUAL FIXES HERE ---
+    "height": "85vh",        # Force height to 85% of viewport
+    "expandRows": True,      # CRITICAL: Forces rows to stretch to fill that height
+    "handleWindowResize": True,
     "contentHeight": "auto",
 }
 
