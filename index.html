@@ -31,7 +31,7 @@
         }
         .dock-btn {
             background-color: #262730; border: 1px solid #444; color: white;
-            font-weight: 600; padding: 10px 20px; border-radius: 8px; width: 150px;
+            font-weight: 600; padding: 10px 15px; border-radius: 8px; width: 140px;
         }
         .dock-btn:hover { background-color: #0078D4; border-color: #0078D4; }
 
@@ -45,6 +45,15 @@
             background: #1a1b21; padding: 30px; border-radius: 10px;
             border: 1px solid #333; width: 400px;
         }
+
+        /* Custom Scrollbar for lists */
+        .scrollable-list { max-height: 300px; overflow-y: auto; }
+        .scrollable-list::-webkit-scrollbar { width: 8px; }
+        .scrollable-list::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        
+        /* Dropdown Checkboxes */
+        .dropdown-item-checkbox { padding: 8px 15px; cursor: pointer; }
+        .dropdown-item-checkbox:hover { background-color: #333; }
     </style>
 </head>
 <body>
@@ -62,8 +71,9 @@
         <div id="calendar"></div>
         
         <div class="bottom-dock">
-            <button class="dock-btn" data-bs-toggle="modal" data-bs-target="#addEventModal">➕ Add Item</button>
+            <button class="dock-btn" onclick="openAddEventModal()">➕ Add Item</button>
             <button class="dock-btn" onclick="openTeamManager()">👥 Team</button>
+            <button class="dock-btn" onclick="openTypeManager()">🎨 Types</button>
             <button class="dock-btn" onclick="location.reload()">🔄 Refresh</button>
         </div>
     </div>
@@ -77,22 +87,25 @@
                 </div>
                 <div class="modal-body">
                     <input type="text" id="evt-title" class="form-control mb-3 bg-dark text-white" placeholder="Project / Description">
+                    
                     <div class="row g-2 mb-3">
                         <div class="col-7">
-                            <label class="small text-muted">Assignee</label>
-                            <select id="evt-assignee" class="form-select bg-dark text-white"></select>
+                            <label class="small text-muted">Assign Members</label>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-white bg-dark" type="button" id="multiSelectBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                                    Select Members...
+                                </button>
+                                <ul class="dropdown-menu w-100 bg-dark border-secondary scrollable-list" id="member-checkbox-list">
+                                    </ul>
+                            </div>
                         </div>
                         <div class="col-5">
-                            <label class="small text-muted">Type</label>
+                            <label class="small text-muted">Activity Type</label>
                             <select id="evt-type" class="form-select bg-dark text-white">
-                                <option value="#0078D4">Panel Build</option>
-                                <option value="#107C10">Vacation</option>
-                                <option value="#D13438">On-Site Startup</option>
-                                <option value="#FF8C00">Office Day</option>
-                                <option value="#881798">Maintenance</option>
-                            </select>
+                                </select>
                         </div>
                     </div>
+                    
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="small text-muted">Start Date</label>
@@ -122,7 +135,27 @@
                         <button onclick="addMember()" class="btn btn-success">Add</button>
                     </div>
                     <p class="text-muted small">Current Team Members:</p>
-                    <ul id="team-list" class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto;"></ul>
+                    <ul id="team-list" class="list-group list-group-flush scrollable-list"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="typeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">Manage Activity Types</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group mb-3">
+                        <input type="text" id="new-type-name" class="form-control bg-dark text-white" placeholder="Type Name (e.g. Training)">
+                        <input type="color" id="new-type-color" class="form-control form-control-color bg-dark border-secondary" value="#0d6efd" title="Choose color">
+                        <button onclick="addType()" class="btn btn-success">Add</button>
+                    </div>
+                    <p class="text-muted small">Current Activities:</p>
+                    <ul id="type-list" class="list-group list-group-flush scrollable-list"></ul>
                 </div>
             </div>
         </div>
@@ -134,7 +167,17 @@
         const REPO_NAME = "Controls-Calendar"; 
         const SCHEDULE_FILE = "schedule.json";
         const TEAM_FILE = "team.json";
+        const TYPES_FILE = "types.json"; // New file for activity types
         
+        // --- DEFAULT DATA ---
+        const DEFAULT_TYPES = [
+            { name: "Panel Build", color: "#0078D4" },
+            { name: "Vacation", color: "#107C10" },
+            { name: "On-Site Startup", color: "#D13438" },
+            { name: "Office Day", color: "#FF8C00" },
+            { name: "Maintenance", color: "#881798" }
+        ];
+
         // --- STATE ---
         let octokit = null;
         let calendar = null;
@@ -142,6 +185,8 @@
         let scheduleSha = null;
         let teamData = [];
         let teamSha = null;
+        let typeData = [];
+        let typeSha = null;
 
         // --- AUTH ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -151,8 +196,9 @@
                 login();
             }
             // Set default dates
-            document.getElementById('evt-start').valueAsDate = new Date();
-            document.getElementById('evt-end').valueAsDate = new Date();
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('evt-start').value = today;
+            document.getElementById('evt-end').value = today;
         });
 
         async function login() {
@@ -162,8 +208,6 @@
             try {
                 const { Octokit } = window;
                 octokit = new Octokit({ auth: token });
-                
-                // Test connection
                 const user = await octokit.request('GET /user');
                 console.log("Logged in as:", user.data.login);
                 
@@ -179,15 +223,13 @@
         }
 
         async function initApp() {
-            await loadTeam();
-            await loadSchedule();
+            await Promise.all([loadTeam(), loadTypes(), loadSchedule()]);
             initCalendar();
         }
 
         // --- GITHUB API HELPERS ---
         async function getFile(filename) {
             try {
-                // Add timestamp to prevent browser caching
                 const timestamp = new Date().getTime();
                 const response = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}?t=${timestamp}`, {
                     owner: REPO_OWNER, repo: REPO_NAME, path: filename
@@ -197,8 +239,7 @@
                     sha: response.data.sha
                 };
             } catch (e) {
-                console.log(`${filename} not found, returning empty.`);
-                return { content: [], sha: null };
+                return { content: null, sha: null };
             }
         }
 
@@ -210,7 +251,6 @@
                     content: btoa(JSON.stringify(content, null, 2)),
                     sha: sha
                 });
-                // CRITICAL: Return the NEW SHA so we stay in sync
                 return response.data.content.sha;
             } catch (e) {
                 alert("Error saving: " + e.message);
@@ -221,36 +261,23 @@
         // --- DATA LOADING ---
         async function loadTeam() {
             const data = await getFile(TEAM_FILE);
-            teamData = data.content.length ? data.content : ["Carson", "Dave Miller"]; 
+            teamData = data.content || ["Carson", "Dave Miller"];
             teamSha = data.sha;
-            updateDropdowns(); // Update UI from local data
         }
 
-        // Helper to update dropdowns without hitting the API
-        function updateDropdowns() {
-            const select = document.getElementById('evt-assignee');
-            const currentVal = select.value; // Try to keep selection
-            select.innerHTML = "";
-            
-            teamData.forEach(member => {
-                const opt = document.createElement("option");
-                opt.value = member;
-                opt.innerText = member;
-                select.appendChild(opt);
-            });
-            
-            if (teamData.includes(currentVal)) {
-                select.value = currentVal;
-            }
+        async function loadTypes() {
+            const data = await getFile(TYPES_FILE);
+            typeData = data.content || DEFAULT_TYPES;
+            typeSha = data.sha;
         }
 
         async function loadSchedule() {
             const data = await getFile(SCHEDULE_FILE);
-            scheduleData = data.content;
+            scheduleData = data.content || [];
             scheduleSha = data.sha;
         }
 
-        // --- CALENDAR ---
+        // --- CALENDAR & UI ---
         function initCalendar() {
             const calendarEl = document.getElementById('calendar');
             calendar = new FullCalendar.Calendar(calendarEl, {
@@ -263,35 +290,91 @@
             calendar.render();
         }
 
-        // --- ACTIONS ---
+        function openAddEventModal() {
+            // Populate Multi-Select Dropdown
+            const list = document.getElementById('member-checkbox-list');
+            list.innerHTML = "";
+            teamData.forEach(member => {
+                const li = document.createElement("li");
+                li.innerHTML = `
+                    <label class="dropdown-item-checkbox w-100 d-block text-white">
+                        <input type="checkbox" class="form-check-input me-2 member-check" value="${member}">
+                        ${member}
+                    </label>`;
+                list.appendChild(li);
+            });
+            updateSelectedCount(); // Reset Text
+            
+            // Listen for checkbox changes to update button text
+            document.querySelectorAll('.member-check').forEach(box => {
+                box.addEventListener('change', updateSelectedCount);
+            });
+
+            // Populate Type Dropdown
+            const typeSelect = document.getElementById('evt-type');
+            typeSelect.innerHTML = "";
+            typeData.forEach(type => {
+                const opt = document.createElement("option");
+                opt.value = type.color; // Value is color
+                opt.innerText = type.name;
+                opt.setAttribute('data-name', type.name); // Store name
+                typeSelect.appendChild(opt);
+            });
+
+            new bootstrap.Modal(document.getElementById('addEventModal')).show();
+        }
+
+        function updateSelectedCount() {
+            const checked = document.querySelectorAll('.member-check:checked');
+            const btn = document.getElementById('multiSelectBtn');
+            if (checked.length === 0) btn.innerText = "Select Members...";
+            else if (checked.length === 1) btn.innerText = checked[0].value;
+            else btn.innerText = `${checked.length} Members Selected`;
+        }
+
+        // --- SAVE EVENT LOGIC ---
         async function saveEvent() {
             const title = document.getElementById('evt-title').value;
-            const assignee = document.getElementById('evt-assignee').value;
-            const color = document.getElementById('evt-type').value;
+            const typeSelect = document.getElementById('evt-type');
+            const color = typeSelect.value;
+            const typeName = typeSelect.options[typeSelect.selectedIndex].getAttribute('data-name');
             const start = document.getElementById('evt-start').value;
             let end = document.getElementById('evt-end').value;
 
-            if (!title || !start || !end) return alert("Please fill all fields");
+            // Get Selected Members
+            const checkboxes = document.querySelectorAll('.member-check:checked');
+            const selectedMembers = Array.from(checkboxes).map(cb => cb.value);
+
+            if (!title || !start || !end || selectedMembers.length === 0) {
+                return alert("Please fill title, dates, and select at least one member.");
+            }
             
+            // Fix End Date
             let endDateObj = new Date(end);
             endDateObj.setDate(endDateObj.getDate() + 1);
             const adjEnd = endDateObj.toISOString().split('T')[0];
 
-            const newEvent = {
-                title: `${assignee}: ${title}`,
-                start: start,
-                end: adjEnd,
-                backgroundColor: color,
-                borderColor: color,
-                resourceId: assignee
-            };
+            // Create Event for EACH selected member
+            const newEvents = [];
             
-            calendar.addEvent(newEvent);
-            const modal = bootstrap.Modal.getInstance(document.getElementById('addEventModal'));
-            modal.hide();
+            selectedMembers.forEach(member => {
+                newEvents.push({
+                    title: `${member}: ${title}`, // Carson: Panel Build
+                    start: start,
+                    end: adjEnd,
+                    backgroundColor: color,
+                    borderColor: color,
+                    resourceId: member,
+                    extendedProps: { type: typeName }
+                });
+            });
 
-            scheduleData.push(newEvent);
-            // Wait for the new SHA and update our local variable
+            // Optimistic Update
+            newEvents.forEach(ev => calendar.addEvent(ev));
+            bootstrap.Modal.getInstance(document.getElementById('addEventModal')).hide();
+
+            // Save
+            scheduleData.push(...newEvents);
             scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
         }
 
@@ -307,56 +390,69 @@
             teamData.forEach((member, index) => {
                 const li = document.createElement("li");
                 li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
-                li.innerHTML = `
-                    <span>👤 ${member}</span>
-                    <button class="btn btn-sm btn-outline-danger" onclick="removeMember(${index})">🗑️</button>
-                `;
+                li.innerHTML = `<span>👤 ${member}</span> <button class="btn btn-sm btn-outline-danger" onclick="removeMember(${index})">🗑️</button>`;
                 list.appendChild(li);
             });
         }
 
         async function addMember() {
-            const nameInput = document.getElementById('new-member-name');
-            const name = nameInput.value.trim();
-            
+            const name = document.getElementById('new-member-name').value.trim();
             if (name && !teamData.includes(name)) {
-                // 1. Update Local Data
-                teamData.push(name);
-                teamData.sort();
-                
-                // 2. Update UI Immediately
+                teamData.push(name); teamData.sort();
                 renderTeamList();
-                updateDropdowns(); // Update dropdowns locally
-                nameInput.value = "";
-                
-                // 3. Save to Server and capture the NEW SHA
-                try {
-                    const newSha = await saveFile(TEAM_FILE, teamData, teamSha);
-                    teamSha = newSha; // <--- CRITICAL FIX: Update the lock
-                } catch (err) {
-                    console.error("Save failed", err);
-                    alert("Failed to save to GitHub. Refresh page.");
-                }
+                document.getElementById('new-member-name').value = "";
+                teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
             }
         }
 
         async function removeMember(index) {
             if(confirm(`Remove ${teamData[index]}?`)) {
-                // 1. Update Local Data
-                teamData.splice(index, 1);
-                
-                // 2. Update UI Immediately
-                renderTeamList();
-                updateDropdowns();
-                
-                // 3. Save to Server and capture the NEW SHA
-                try {
-                    const newSha = await saveFile(TEAM_FILE, teamData, teamSha);
-                    teamSha = newSha; // <--- CRITICAL FIX: Update the lock
-                } catch (err) {
-                    console.error("Save failed", err);
-                    alert("Failed to save to GitHub. Refresh page.");
-                }
+                teamData.splice(index, 1); renderTeamList();
+                teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
+            }
+        }
+
+        // --- TYPE MANAGER ---
+        function openTypeManager() {
+            renderTypeList();
+            new bootstrap.Modal(document.getElementById('typeModal')).show();
+        }
+
+        function renderTypeList() {
+            const list = document.getElementById('type-list');
+            list.innerHTML = "";
+            typeData.forEach((type, index) => {
+                const li = document.createElement("li");
+                li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
+                // Show color swatch and name
+                li.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <span style="display:inline-block; width:15px; height:15px; background-color:${type.color}; margin-right:10px; border-radius:3px;"></span>
+                        <span>${type.name}</span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeType(${index})">🗑️</button>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        async function addType() {
+            const name = document.getElementById('new-type-name').value.trim();
+            const color = document.getElementById('new-type-color').value;
+            
+            // Check for duplicates
+            if (name && !typeData.some(t => t.name === name)) {
+                typeData.push({ name: name, color: color });
+                renderTypeList();
+                document.getElementById('new-type-name').value = "";
+                typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
+            }
+        }
+
+        async function removeType(index) {
+            if(confirm(`Delete activity type "${typeData[index].name}"?`)) {
+                typeData.splice(index, 1); renderTypeList();
+                typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
             }
         }
     </script>
