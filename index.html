@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler v3.0</title>
+    <title>Controls Team Scheduler v3.1</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -83,7 +83,7 @@
 
     <div id="app-container" style="display:none;">
         <div class="d-flex justify-content-between align-items-center px-4 pt-2">
-            <h5 class="text-muted">Controls & Automation Scheduler <span class="badge bg-primary" style="font-size: 0.6em;">v3.0</span></h5>
+            <h5 class="text-muted">Controls & Automation Scheduler <span class="badge bg-success" style="font-size: 0.6em;">v3.1</span></h5>
         </div>
 
         <div id="calendar"></div>
@@ -213,10 +213,7 @@
                 mode: "range",
                 dateFormat: "Y-m-d",
                 theme: "dark",
-                minDate: "today",
-                onChange: function(selectedDates, dateStr, instance) {
-                    // Optional: Validation logic here
-                }
+                minDate: "today"
             });
         });
 
@@ -304,7 +301,14 @@
                 themeSystem: 'bootstrap5',
                 // CUSTOM RENDER: Show Project + Member List
                 eventContent: function(arg) {
-                    let members = arg.event.extendedProps.members || [];
+                    // Safety check for old vs new event formats
+                    let members = [];
+                    if (arg.event.extendedProps && arg.event.extendedProps.members) {
+                        members = arg.event.extendedProps.members;
+                    } else if (arg.event.resourceId) {
+                        members = [arg.event.resourceId]; // Handle old single events
+                    }
+                    
                     let memberString = members.join(", ");
                     return {
                         html: `<div>
@@ -369,11 +373,8 @@
             
             // Get Date Range from Flatpickr
             const selectedDates = fpInstance.selectedDates;
-            if (selectedDates.length < 2) return alert("Please select a date range (Start & End).");
+            if (!selectedDates || selectedDates.length < 2) return alert("Please select a date range (Start & End).");
             
-            // Format Dates
-            // FullCalendar needs inclusive start, exclusive end. Flatpickr gives us both inclusive.
-            // We need to add 1 day to the end date for FullCalendar to render it correctly.
             const startStr = fpInstance.formatDate(selectedDates[0], "Y-m-d");
             let endDate = new Date(selectedDates[1]);
             endDate.setDate(endDate.getDate() + 1); 
@@ -387,25 +388,35 @@
                 return alert("Please fill title and select at least one member.");
             }
             
-            // CONFLICT CHECK (Group Logic)
-            // Check if ANY selected member is busy during this time
+            // --- FIXED CONFLICT CHECK (Handles Old & New Events) ---
             let conflictMsg = "";
             const newStart = new Date(startStr);
             const newEnd = new Date(endStr);
+            const currentSchedule = scheduleData || [];
 
-            for (let event of scheduleData) {
+            for (let event of currentSchedule) {
+                if (!event.start || !event.end) continue;
+
                 const evStart = new Date(event.start);
                 const evEnd = new Date(event.end);
                 
                 // Check Date Overlap
                 if (newStart < evEnd && newEnd > evStart) {
-                    // Check Member Overlap
-                    const existingMembers = event.extendedProps.members || [];
-                    const overlaps = selectedMembers.filter(m => existingMembers.includes(m));
-                    
-                    if (overlaps.length > 0) {
-                        conflictMsg = `Conflict! ${overlaps.join(", ")} is already busy with "${event.title}".`;
-                        break;
+                    // 1. Check V3 "Group" Events
+                    if (event.extendedProps && event.extendedProps.members) {
+                        const existingGroup = event.extendedProps.members;
+                        const overlap = selectedMembers.find(m => existingGroup.includes(m));
+                        if (overlap) {
+                            conflictMsg = `Conflict! ${overlap} is already busy with "${event.title}".`;
+                            break;
+                        }
+                    } 
+                    // 2. Check V2 "Individual" Events (resourceId)
+                    else if (event.resourceId) {
+                         if (selectedMembers.includes(event.resourceId)) {
+                             conflictMsg = `Conflict! ${event.resourceId} is already busy with "${event.title}".`;
+                             break;
+                         }
                     }
                 }
             }
@@ -421,7 +432,7 @@
                 borderColor: color,
                 extendedProps: { 
                     type: typeName,
-                    members: selectedMembers // Store list of people
+                    members: selectedMembers
                 }
             };
 
@@ -483,7 +494,7 @@
                 // Update Group Events
                 let scheduleChanged = false;
                 scheduleData.forEach(ev => {
-                    let mems = ev.extendedProps.members || [];
+                    let mems = (ev.extendedProps && ev.extendedProps.members) ? ev.extendedProps.members : [];
                     if (mems.includes(oldName)) {
                         // Replace old name with new name
                         ev.extendedProps.members = mems.map(m => m === oldName ? name : m);
@@ -573,7 +584,7 @@
                 
                 let scheduleChanged = false;
                 scheduleData.forEach(ev => {
-                    if (ev.extendedProps.type === oldName) {
+                    if (ev.extendedProps && ev.extendedProps.type === oldName) {
                         ev.extendedProps.type = name;
                         ev.backgroundColor = color;
                         ev.borderColor = color;
