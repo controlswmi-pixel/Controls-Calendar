@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler v3.1</title>
+    <title>Controls Team Scheduler v3.2</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -25,7 +25,7 @@
         .fc-toolbar-title { font-size: 1.5rem !important; }
         .fc-event { cursor: pointer; border: none; }
         
-        /* Custom Event Content (Project + Members) */
+        /* Event Content */
         .fc-event-main { padding: 4px; }
         .event-title { font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 2px; }
         .event-members { font-size: 0.75em; opacity: 0.9; display: block; line-height: 1.1; }
@@ -54,19 +54,15 @@
             border: 1px solid #333; width: 400px;
         }
 
-        /* Scrollable Lists */
+        /* Lists & Scrollbars */
         .scrollable-list { max-height: 300px; overflow-y: auto; }
         .scrollable-list::-webkit-scrollbar { width: 8px; }
         .scrollable-list::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
         
-        /* Dropdown Checkboxes */
         .dropdown-item-checkbox { padding: 8px 15px; cursor: pointer; display: block; }
         .dropdown-item-checkbox:hover { background-color: #333; }
         
-        /* Color Swatch */
         .color-swatch { display: inline-block; width: 15px; height: 15px; border-radius: 3px; margin-right: 8px; }
-
-        /* Action Buttons in Lists */
         .btn-icon { padding: 2px 6px; margin-left: 5px; }
     </style>
 </head>
@@ -83,7 +79,7 @@
 
     <div id="app-container" style="display:none;">
         <div class="d-flex justify-content-between align-items-center px-4 pt-2">
-            <h5 class="text-muted">Controls & Automation Scheduler <span class="badge bg-success" style="font-size: 0.6em;">v3.1</span></h5>
+            <h5 class="text-muted">Controls & Automation Scheduler <span class="badge bg-success" style="font-size: 0.6em;">v3.2</span></h5>
         </div>
 
         <div id="calendar"></div>
@@ -191,12 +187,10 @@
         // --- STATE ---
         let octokit = null;
         let calendar = null;
-        let fpInstance = null; // Flatpickr Instance
+        let fpInstance = null;
         let scheduleData = []; let scheduleSha = null;
         let teamData = []; let teamSha = null;
         let typeData = []; let typeSha = null;
-
-        // Edit Mode State
         let editingTeamIndex = -1;
         let editingTypeIndex = -1;
 
@@ -208,7 +202,6 @@
                 login();
             }
             
-            // Initialize Flatpickr (Range Mode)
             fpInstance = flatpickr("#date-range-picker", {
                 mode: "range",
                 dateFormat: "Y-m-d",
@@ -241,6 +234,15 @@
         }
 
         // --- GITHUB API HELPERS ---
+        // Helper to encode Unicode/Emojis safely
+        function utf8_to_b64(str) {
+            return window.btoa(unescape(encodeURIComponent(str)));
+        }
+
+        function b64_to_utf8(str) {
+            return decodeURIComponent(escape(window.atob(str)));
+        }
+
         async function getFile(filename) {
             try {
                 const timestamp = new Date().getTime();
@@ -248,7 +250,7 @@
                     owner: REPO_OWNER, repo: REPO_NAME, path: filename
                 });
                 return {
-                    content: JSON.parse(atob(response.data.content)),
+                    content: JSON.parse(b64_to_utf8(response.data.content)),
                     sha: response.data.sha
                 };
             } catch (e) {
@@ -257,16 +259,26 @@
         }
 
         async function saveFile(filename, content, sha) {
+            // FIX: Dynamically build params to handle NULL SHA correctly
+            const params = {
+                owner: REPO_OWNER, 
+                repo: REPO_NAME, 
+                path: filename,
+                message: "Update via Web App",
+                content: utf8_to_b64(JSON.stringify(content, null, 2))
+            };
+
+            // ONLY include SHA if we have one. Sending 'sha: null' breaks the API.
+            if (sha) {
+                params.sha = sha;
+            }
+
             try {
-                const response = await octokit.request(`PUT /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, {
-                    owner: REPO_OWNER, repo: REPO_NAME, path: filename,
-                    message: "Update via Web App",
-                    content: btoa(JSON.stringify(content, null, 2)),
-                    sha: sha
-                });
+                const response = await octokit.request(`PUT /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, params);
                 return response.data.content.sha;
             } catch (e) {
-                alert("Error saving: " + e.message);
+                const msg = e.response ? e.response.data.message : e.message;
+                alert("GitHub Save Error: " + msg);
                 throw e;
             }
         }
@@ -299,14 +311,12 @@
                 events: scheduleData,
                 height: '80vh',
                 themeSystem: 'bootstrap5',
-                // CUSTOM RENDER: Show Project + Member List
                 eventContent: function(arg) {
-                    // Safety check for old vs new event formats
                     let members = [];
                     if (arg.event.extendedProps && arg.event.extendedProps.members) {
                         members = arg.event.extendedProps.members;
                     } else if (arg.event.resourceId) {
-                        members = [arg.event.resourceId]; // Handle old single events
+                        members = [arg.event.resourceId];
                     }
                     
                     let memberString = members.join(", ");
@@ -321,9 +331,8 @@
             calendar.render();
         }
 
-        // --- ADD EVENT & MULTI-SELECT ---
+        // --- ADD EVENT ---
         function openAddEventModal() {
-            // Populate Members
             const list = document.getElementById('member-checkbox-list');
             list.innerHTML = "";
             teamData.forEach(member => {
@@ -340,7 +349,6 @@
                 box.addEventListener('change', updateSelectedCount);
             });
 
-            // Populate Types
             const typeSelect = document.getElementById('evt-type');
             typeSelect.innerHTML = "";
             typeData.forEach(type => {
@@ -351,9 +359,7 @@
                 typeSelect.appendChild(opt);
             });
             
-            // Clear Date Picker
             fpInstance.clear();
-
             new bootstrap.Modal(document.getElementById('addEventModal')).show();
         }
 
@@ -371,7 +377,6 @@
             const color = typeSelect.value;
             const typeName = typeSelect.options[typeSelect.selectedIndex].getAttribute('data-name');
             
-            // Get Date Range from Flatpickr
             const selectedDates = fpInstance.selectedDates;
             if (!selectedDates || selectedDates.length < 2) return alert("Please select a date range (Start & End).");
             
@@ -380,7 +385,6 @@
             endDate.setDate(endDate.getDate() + 1); 
             const endStr = endDate.toISOString().split('T')[0];
 
-            // Get Members
             const checkboxes = document.querySelectorAll('.member-check:checked');
             const selectedMembers = Array.from(checkboxes).map(cb => cb.value);
 
@@ -388,7 +392,7 @@
                 return alert("Please fill title and select at least one member.");
             }
             
-            // --- FIXED CONFLICT CHECK (Handles Old & New Events) ---
+            // CONFLICT CHECK
             let conflictMsg = "";
             const newStart = new Date(startStr);
             const newEnd = new Date(endStr);
@@ -396,26 +400,17 @@
 
             for (let event of currentSchedule) {
                 if (!event.start || !event.end) continue;
-
                 const evStart = new Date(event.start);
                 const evEnd = new Date(event.end);
                 
-                // Check Date Overlap
                 if (newStart < evEnd && newEnd > evStart) {
-                    // 1. Check V3 "Group" Events
                     if (event.extendedProps && event.extendedProps.members) {
                         const existingGroup = event.extendedProps.members;
                         const overlap = selectedMembers.find(m => existingGroup.includes(m));
-                        if (overlap) {
-                            conflictMsg = `Conflict! ${overlap} is already busy with "${event.title}".`;
-                            break;
-                        }
-                    } 
-                    // 2. Check V2 "Individual" Events (resourceId)
-                    else if (event.resourceId) {
+                        if (overlap) { conflictMsg = `Conflict! ${overlap} is already busy with "${event.title}".`; break; }
+                    } else if (event.resourceId) {
                          if (selectedMembers.includes(event.resourceId)) {
-                             conflictMsg = `Conflict! ${event.resourceId} is already busy with "${event.title}".`;
-                             break;
+                             conflictMsg = `Conflict! ${event.resourceId} is already busy with "${event.title}".`; break;
                          }
                     }
                 }
@@ -423,17 +418,13 @@
 
             if (conflictMsg) return alert(conflictMsg);
 
-            // CREATE SINGLE GROUP EVENT
             const newEvent = {
                 title: title, 
                 start: startStr,
                 end: endStr,
                 backgroundColor: color,
                 borderColor: color,
-                extendedProps: { 
-                    type: typeName,
-                    members: selectedMembers
-                }
+                extendedProps: { type: typeName, members: selectedMembers }
             };
 
             calendar.addEvent(newEvent);
@@ -455,12 +446,7 @@
             teamData.forEach((member, index) => {
                 const li = document.createElement("li");
                 li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
-                li.innerHTML = `
-                    <span>👤 ${member}</span> 
-                    <div>
-                        <button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditMember(${index})">✏️</button>
-                        <button class="btn btn-sm btn-outline-danger btn-icon" onclick="removeMember(${index})">🗑️</button>
-                    </div>`;
+                li.innerHTML = `<span>👤 ${member}</span> <div><button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditMember(${index})">✏️</button><button class="btn btn-sm btn-outline-danger btn-icon" onclick="removeMember(${index})">🗑️</button></div>`;
                 list.appendChild(li);
             });
         }
@@ -484,36 +470,27 @@
         async function handleMemberSubmit() {
             const name = document.getElementById('new-member-name').value.trim();
             if (!name) return;
-
             if (editingTeamIndex > -1) {
-                // Update Logic
                 const oldName = teamData[editingTeamIndex];
-                teamData[editingTeamIndex] = name;
-                teamData.sort();
+                teamData[editingTeamIndex] = name; teamData.sort();
                 
-                // Update Group Events
                 let scheduleChanged = false;
                 scheduleData.forEach(ev => {
                     let mems = (ev.extendedProps && ev.extendedProps.members) ? ev.extendedProps.members : [];
                     if (mems.includes(oldName)) {
-                        // Replace old name with new name
                         ev.extendedProps.members = mems.map(m => m === oldName ? name : m);
                         scheduleChanged = true;
                     }
                 });
-
-                renderTeamList();
-                cancelTeamEdit();
+                renderTeamList(); cancelTeamEdit();
                 teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
                 if (scheduleChanged) {
                     scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
                     initCalendar();
                 }
             } else {
-                // Add Logic
                 if (!teamData.includes(name)) {
-                    teamData.push(name); teamData.sort();
-                    renderTeamList();
+                    teamData.push(name); teamData.sort(); renderTeamList();
                     document.getElementById('new-member-name').value = "";
                     teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
                 }
@@ -529,8 +506,7 @@
 
         // --- TYPE MANAGER ---
         function openTypeManager() {
-            cancelTypeEdit();
-            renderTypeList();
+            cancelTypeEdit(); renderTypeList();
             new bootstrap.Modal(document.getElementById('typeModal')).show();
         }
 
@@ -540,15 +516,7 @@
             typeData.forEach((type, index) => {
                 const li = document.createElement("li");
                 li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
-                li.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <span class="color-swatch" style="background-color:${type.color};"></span>
-                        <span>${type.name}</span>
-                    </div>
-                    <div>
-                        <button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditType(${index})">✏️</button>
-                        <button class="btn btn-sm btn-outline-danger btn-icon" onclick="removeType(${index})">🗑️</button>
-                    </div>`;
+                li.innerHTML = `<div class="d-flex align-items-center"><span class="color-swatch" style="background-color:${type.color};"></span><span>${type.name}</span></div><div><button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditType(${index})">✏️</button><button class="btn btn-sm btn-outline-danger btn-icon" onclick="removeType(${index})">🗑️</button></div>`;
                 list.appendChild(li);
             });
         }
@@ -576,7 +544,6 @@
             const name = document.getElementById('new-type-name').value.trim();
             const color = document.getElementById('new-type-color').value;
             if (!name) return;
-
             if (editingTypeIndex > -1) {
                 const oldType = typeData[editingTypeIndex];
                 const oldName = oldType.name;
@@ -586,14 +553,11 @@
                 scheduleData.forEach(ev => {
                     if (ev.extendedProps && ev.extendedProps.type === oldName) {
                         ev.extendedProps.type = name;
-                        ev.backgroundColor = color;
-                        ev.borderColor = color;
+                        ev.backgroundColor = color; ev.borderColor = color;
                         scheduleChanged = true;
                     }
                 });
-
-                renderTypeList();
-                cancelTypeEdit();
+                renderTypeList(); cancelTypeEdit();
                 typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
                 if (scheduleChanged) {
                     scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
@@ -601,8 +565,7 @@
                 }
             } else {
                 if (!typeData.some(t => t.name === name)) {
-                    typeData.push({ name: name, color: color });
-                    renderTypeList();
+                    typeData.push({ name: name, color: color }); renderTypeList();
                     document.getElementById('new-type-name').value = "";
                     typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
                 }
