@@ -43,41 +43,40 @@
         .modal-dialog { max-width: 900px !important; }
         .modal-sm { max-width: 400px !important; }
         
-        /* --- GRID LIST SYSTEM (NEW) --- */
-        /* Used for Team Members, Types, and Filters to avoid scrolling */
+        /* --- GRID LIST SYSTEM (NEW v5.4) --- */
+        /* Replaces vertical lists with responsive grids to reduce scrolling */
         .grid-list {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* Auto-fit columns */
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); /* Cards autofit space */
             gap: 10px;
             padding: 5px;
             max-height: 500px; 
             overflow-y: auto;
         }
         
-        /* Individual Card Style */
         .grid-item {
             background-color: #212529;
             border: 1px solid #495057;
             border-radius: 6px;
-            padding: 10px;
+            padding: 8px 12px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             transition: background 0.2s;
         }
         .grid-item:hover { background-color: #2c3036; }
-        
+
         .dropdown-item-checkbox { 
             padding: 0; 
             cursor: pointer; 
             display: flex; 
             align-items: center;
-            font-size: 1em; 
+            font-size: 1.1em; 
             margin: 0;
             width: 100%;
         }
 
-        /* --- TIME PICKER WALL (NEW GRID) --- */
+        /* --- TIME PICKER WALL (NEW v5.4) --- */
         .time-picker-dropdown {
             position: absolute;
             width: 100%;
@@ -87,9 +86,9 @@
             z-index: 1055;
             box-shadow: 0 8px 16px rgba(0,0,0,0.5);
             
-            /* The Grid Layout */
-            display: none; /* Toggled by JS */
-            grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); /* Dense grid */
+            /* Grid Layout for Times */
+            display: none; 
+            grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
             gap: 5px;
             padding: 10px;
             max-height: 300px;
@@ -113,12 +112,12 @@
         /* Scrollbars */
         .grid-list::-webkit-scrollbar, .time-picker-dropdown::-webkit-scrollbar { width: 8px; }
         .grid-list::-webkit-scrollbar-thumb, .time-picker-dropdown::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
-        
+
         /* Visual Helpers */
         .color-swatch { display: inline-block; width: 20px; height: 20px; border-radius: 4px; margin-right: 12px; }
         .btn-icon { padding: 4px 8px; margin-left: 5px; }
         #loading-spinner { display: none; margin-left: 10px; }
-        
+
         /* Bottom Dock */
         .bottom-dock {
             position: fixed; bottom: 0; left: 0; width: 100%;
