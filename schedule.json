@@ -47,5 +47,21 @@
         "Carson Hunter"
       ]
     }
+  },
+  {
+    "id": "b6b767fe-2fc1-44d9-9ed2-b150d95de5b5",
+    "title": "Test",
+    "start": "2026-02-12T13:00:00.000Z",
+    "end": "2026-02-13T22:00:00.000Z",
+    "allDay": false,
+    "backgroundColor": "#FF8C00",
+    "borderColor": "#FF8C00",
+    "extendedProps": {
+      "type": "Office Day",
+      "members": [
+        "Andrew Roberts",
+        "Carson Hunter"
+      ]
+    }
   }
 ]
