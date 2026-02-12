@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controls Team Scheduler v5.3</title>
+    <title>Controls Team Scheduler v5.4</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
@@ -26,9 +26,13 @@
         .fc a { text-decoration: none !important; color: inherit !important; }
         .fc-col-header-cell-cushion { color: white !important; } 
         .fc-daygrid-day-number { color: rgba(255, 255, 255, 0.75) !important; padding: 4px 8px !important; }
+        
+        /* List View Colors */
         .fc-list-day-cushion { background-color: #262730 !important; }
         .fc-list-day-text, .fc-list-day-side-text { color: white !important; }
         .fc-list-event:hover td { background-color: #2b2d35 !important; }
+        
+        /* Event Styling */
         .fc-event { cursor: pointer; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .fc-event:hover { filter: brightness(1.1); }
         .fc-event-main { padding: 4px; }
@@ -39,33 +43,82 @@
         .modal-dialog { max-width: 900px !important; }
         .modal-sm { max-width: 400px !important; }
         
-        /* --- CUSTOM TIME PICKER --- */
+        /* --- GRID LIST SYSTEM (NEW) --- */
+        /* Used for Team Members, Types, and Filters to avoid scrolling */
+        .grid-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* Auto-fit columns */
+            gap: 10px;
+            padding: 5px;
+            max-height: 500px; 
+            overflow-y: auto;
+        }
+        
+        /* Individual Card Style */
+        .grid-item {
+            background-color: #212529;
+            border: 1px solid #495057;
+            border-radius: 6px;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.2s;
+        }
+        .grid-item:hover { background-color: #2c3036; }
+        
+        .dropdown-item-checkbox { 
+            padding: 0; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center;
+            font-size: 1em; 
+            margin: 0;
+            width: 100%;
+        }
+
+        /* --- TIME PICKER WALL (NEW GRID) --- */
         .time-picker-dropdown {
             position: absolute;
             width: 100%;
-            max-height: 250px;
-            overflow-y: auto;
             background: #212529;
             border: 1px solid #495057;
             border-radius: 0.375rem;
             z-index: 1055;
-            display: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            
+            /* The Grid Layout */
+            display: none; /* Toggled by JS */
+            grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); /* Dense grid */
+            gap: 5px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
         }
+        
         .time-option {
-            padding: 8px 16px;
+            padding: 8px 4px;
+            text-align: center;
             cursor: pointer;
-            border-bottom: 1px solid #343a40;
-            transition: background 0.1s;
+            border: 1px solid #343a40;
+            border-radius: 4px;
+            font-size: 0.9em;
+            background-color: #2b3035;
+            transition: all 0.1s;
         }
-        .time-option:hover { background-color: #343a40; }
-        .time-option.selected { background-color: #0d6efd; color: white; }
-        .time-option.in-range { background-color: rgba(13, 110, 253, 0.3); } /* Light blue highlight */
+        .time-option:hover { background-color: #495057; border-color: #6c757d; }
+        .time-option.selected { background-color: #0d6efd; color: white; border-color: #0d6efd; }
+        .time-option.in-range { background-color: rgba(13, 110, 253, 0.3); border-color: rgba(13, 110, 253, 0.5); }
 
-        /* Scrollbar for time picker */
-        .time-picker-dropdown::-webkit-scrollbar { width: 8px; }
-        .time-picker-dropdown::-webkit-scrollbar-thumb { background: #6c757d; border-radius: 4px; }
-
+        /* Scrollbars */
+        .grid-list::-webkit-scrollbar, .time-picker-dropdown::-webkit-scrollbar { width: 8px; }
+        .grid-list::-webkit-scrollbar-thumb, .time-picker-dropdown::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        
+        /* Visual Helpers */
+        .color-swatch { display: inline-block; width: 20px; height: 20px; border-radius: 4px; margin-right: 12px; }
+        .btn-icon { padding: 4px 8px; margin-left: 5px; }
+        #loading-spinner { display: none; margin-left: 10px; }
+        
         /* Bottom Dock */
         .bottom-dock {
             position: fixed; bottom: 0; left: 0; width: 100%;
@@ -78,27 +131,6 @@
             font-weight: 600; padding: 10px 15px; border-radius: 8px; width: 140px;
         }
         .dock-btn:hover { background-color: #0078D4; border-color: #0078D4; }
-
-        /* Login Overlay */
-        #login-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #0e1117; z-index: 2000; display: flex;
-            align-items: center; justify-content: center;
-        }
-        .login-box {
-            background: #1a1b21; padding: 30px; border-radius: 10px;
-            border: 1px solid #333; width: 400px;
-        }
-
-        /* Lists & Scrollbars */
-        .scrollable-list { max-height: 400px; overflow-y: auto; }
-        .scrollable-list::-webkit-scrollbar { width: 8px; }
-        .scrollable-list::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
-        .dropdown-item-checkbox { padding: 12px 15px; cursor: pointer; display: block; font-size: 1.1em; }
-        .dropdown-item-checkbox:hover { background-color: #333; }
-        .color-swatch { display: inline-block; width: 20px; height: 20px; border-radius: 4px; margin-right: 12px; }
-        .btn-icon { padding: 4px 8px; margin-left: 5px; }
-        #loading-spinner { display: none; margin-left: 10px; }
     </style>
 </head>
 <body>
@@ -116,7 +148,7 @@
         <div class="d-flex justify-content-between align-items-center px-4 pt-2">
             <h5 class="text-muted">
                 Controls & Automation Scheduler 
-                <span class="badge bg-success" style="font-size: 0.6em;">v5.3</span>
+                <span class="badge bg-success" style="font-size: 0.6em;">v5.4</span>
                 <span id="loading-spinner" class="spinner-border spinner-border-sm text-primary" role="status"></span>
             </h5>
         </div>
@@ -144,7 +176,7 @@
                         <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllFilters(true)">Select All</button>
                         <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllFilters(false)">Clear All</button>
                     </div>
-                    <div id="filter-list" class="scrollable-list" style="max-height: 300px;"></div>
+                    <div id="filter-list" class="grid-list"></div>
                 </div>
                 <div class="modal-footer border-secondary">
                     <button type="button" class="btn btn-primary w-100" onclick="applyFilters()">Apply Filters</button>
@@ -173,7 +205,7 @@
                                 <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start text-white bg-dark p-2" type="button" id="multiSelectBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside">
                                     Select Members...
                                 </button>
-                                <ul class="dropdown-menu w-100 bg-dark border-secondary scrollable-list" id="member-checkbox-list"></ul>
+                                <ul class="dropdown-menu w-100 bg-dark border-secondary grid-list" id="member-checkbox-list" style="width: 100% !important; min-width: 400px; max-height: 400px;"></ul>
                             </div>
                         </div>
                         <div class="col-5">
@@ -239,7 +271,7 @@
                         <button onclick="handleMemberSubmit()" id="btn-team-submit" class="btn btn-success px-4">Add</button>
                         <button onclick="cancelTeamEdit()" id="btn-team-cancel" class="btn btn-secondary px-3" style="display:none;">✕</button>
                     </div>
-                    <ul id="team-list" class="list-group list-group-flush scrollable-list"></ul>
+                    <div id="team-list" class="grid-list"></div>
                 </div>
             </div>
         </div>
@@ -259,7 +291,7 @@
                         <button onclick="handleTypeSubmit()" id="btn-type-submit" class="btn btn-success px-4">Add</button>
                         <button onclick="cancelTypeEdit()" id="btn-type-cancel" class="btn btn-secondary px-3" style="display:none;">✕</button>
                     </div>
-                    <ul id="type-list" class="list-group list-group-flush scrollable-list"></ul>
+                    <div id="type-list" class="grid-list"></div>
                 </div>
             </div>
         </div>
@@ -320,8 +352,6 @@
         let editingTeamIndex = -1; let editingTypeIndex = -1;
         let pendingSaveData = null; 
         let activeFilters = []; 
-
-        // Time Picker State
         let timeOptions = [];
         let rangeStartIndex = -1;
         let rangeEndIndex = -1;
@@ -329,40 +359,26 @@
         // --- AUTH ---
         document.addEventListener('DOMContentLoaded', () => {
             const storedToken = localStorage.getItem('gh_token');
-            if (storedToken) {
-                document.getElementById('api-token').value = storedToken;
-                login();
-            }
+            if (storedToken) { document.getElementById('api-token').value = storedToken; login(); }
             
-            // Init Flatpickr: Date Range
-            fpDate = flatpickr("#date-range-picker", {
-                mode: "range",
-                dateFormat: "Y-m-d",
-                theme: "dark",
-                minDate: "today"
-            });
-
+            fpDate = flatpickr("#date-range-picker", { mode: "range", dateFormat: "Y-m-d", theme: "dark", minDate: "today" });
             generateTimeOptions();
             setupTimePickerEvents();
         });
 
-        // --- CUSTOM TIME PICKER LOGIC ---
+        // --- CUSTOM TIME PICKER GENERATION (GRID WALL) ---
         function generateTimeOptions() {
             const dropdown = document.getElementById('custom-time-dropdown');
             dropdown.innerHTML = "";
             timeOptions = [];
-            
-            // Generate 15 min intervals
             for (let h = 0; h < 24; h++) {
                 for (let m = 0; m < 60; m += 15) {
                     const ampm = h >= 12 ? 'PM' : 'AM';
                     const h12 = h % 12 || 12;
                     const mStr = m.toString().padStart(2, '0');
                     const timeStr = `${h12}:${mStr} ${ampm}`;
-                    const val = h * 60 + m; // Minutes from midnight
-                    
+                    const val = h * 60 + m;
                     timeOptions.push({ text: timeStr, value: val });
-                    
                     const div = document.createElement('div');
                     div.className = 'time-option';
                     div.innerText = timeStr;
@@ -377,46 +393,23 @@
         function setupTimePickerEvents() {
             const display = document.getElementById('time-range-display');
             const dropdown = document.getElementById('custom-time-dropdown');
-            
             display.addEventListener('click', () => {
-                dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
-                // Scroll to 8:00 AM (approx index 32)
-                if(dropdown.style.display === 'block') {
-                    const target = dropdown.children[32]; 
-                    if(target) target.scrollIntoView({ block: "center" });
-                }
+                const isHidden = dropdown.style.display === 'none' || dropdown.style.display === '';
+                dropdown.style.display = isHidden ? 'grid' : 'none'; // USE GRID!
+                if(isHidden) { const target = dropdown.children[32]; if(target) target.scrollIntoView({ block: "center" }); }
             });
-
-            // Close on outside click is handled by modal backdrop mostly, but extra safety:
             document.addEventListener('click', (e) => {
-                if (!display.contains(e.target) && !dropdown.contains(e.target)) {
-                    dropdown.style.display = 'none';
-                }
+                if (!display.contains(e.target) && !dropdown.contains(e.target)) { dropdown.style.display = 'none'; }
             });
         }
 
         function handleTimeOptionClick(index) {
             const options = document.querySelectorAll('.time-option');
-            
             if (rangeStartIndex === -1 || (rangeStartIndex !== -1 && rangeEndIndex !== -1)) {
-                // First click or Reset
-                rangeStartIndex = index;
-                rangeEndIndex = -1;
-                resetTimeStyles();
-                options[index].classList.add('selected');
+                rangeStartIndex = index; rangeEndIndex = -1; resetTimeStyles(); options[index].classList.add('selected');
             } else {
-                // Second click (End time)
-                if (index < rangeStartIndex) {
-                    // User clicked earlier time, swap or reset? Let's just make it new start.
-                    rangeStartIndex = index;
-                    resetTimeStyles();
-                    options[index].classList.add('selected');
-                } else {
-                    rangeEndIndex = index;
-                    options[index].classList.add('selected');
-                    updateTimeDisplay();
-                    document.getElementById('custom-time-dropdown').style.display = 'none';
-                }
+                if (index < rangeStartIndex) { rangeStartIndex = index; resetTimeStyles(); options[index].classList.add('selected'); }
+                else { rangeEndIndex = index; options[index].classList.add('selected'); updateTimeDisplay(); document.getElementById('custom-time-dropdown').style.display = 'none'; }
             }
         }
 
@@ -424,51 +417,35 @@
             if (rangeStartIndex !== -1 && rangeEndIndex === -1) {
                 const options = document.querySelectorAll('.time-option');
                 options.forEach((opt, i) => {
-                    if (i > rangeStartIndex && i <= index) {
-                        opt.classList.add('in-range');
-                    } else {
-                        opt.classList.remove('in-range');
-                    }
+                    if (i > rangeStartIndex && i <= index) { opt.classList.add('in-range'); } else { opt.classList.remove('in-range'); }
                 });
             }
         }
 
-        function resetTimeStyles() {
-            document.querySelectorAll('.time-option').forEach(opt => {
-                opt.classList.remove('selected', 'in-range');
-            });
-        }
-
+        function resetTimeStyles() { document.querySelectorAll('.time-option').forEach(opt => { opt.classList.remove('selected', 'in-range'); }); }
         function updateTimeDisplay() {
             if (rangeStartIndex !== -1 && rangeEndIndex !== -1) {
-                const t1 = timeOptions[rangeStartIndex].text;
-                const t2 = timeOptions[rangeEndIndex].text;
-                document.getElementById('time-range-display').value = `${t1} - ${t2}`;
+                document.getElementById('time-range-display').value = `${timeOptions[rangeStartIndex].text} - ${timeOptions[rangeEndIndex].text}`;
             }
         }
 
-        // --- TOGGLE LOGIC ---
         function toggleTimeInputs() {
             const isAllDay = document.getElementById('all-day-switch').checked;
-            const timeContainer = document.getElementById('time-inputs-container');
-            timeContainer.style.display = isAllDay ? 'none' : 'block';
+            document.getElementById('time-inputs-container').style.display = isAllDay ? 'none' : 'block';
         }
 
+        // --- GITHUB & APP ---
         async function login() {
             const token = document.getElementById('api-token').value.trim();
             if (!token) return showAlert("Please enter a token");
             try {
-                const { Octokit } = window;
-                octokit = new Octokit({ auth: token });
+                const { Octokit } = window; octokit = new Octokit({ auth: token });
                 const user = await octokit.request('GET /user');
                 localStorage.setItem('gh_token', token);
                 document.getElementById('login-overlay').style.display = 'none';
                 document.getElementById('app-container').style.display = 'block';
                 initApp();
-            } catch (e) {
-                showAlert("Invalid Token or Connection Error: " + e.message);
-                localStorage.removeItem('gh_token');
-            }
+            } catch (e) { showAlert("Invalid Token: " + e.message); localStorage.removeItem('gh_token'); }
         }
 
         async function initApp() {
@@ -476,12 +453,9 @@
             await Promise.all([loadTeam(), loadTypes(), loadSchedule()]);
             activeFilters = [...teamData];
             let migrationNeeded = false;
-            scheduleData.forEach(ev => {
-                if (!ev.id) { ev.id = crypto.randomUUID(); migrationNeeded = true; }
-            });
+            scheduleData.forEach(ev => { if (!ev.id) { ev.id = crypto.randomUUID(); migrationNeeded = true; } });
             if (migrationNeeded) await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
-            hideSpinner();
-            initCalendar();
+            hideSpinner(); initCalendar();
         }
 
         // --- HELPERS ---
@@ -501,56 +475,28 @@
         }
 
         function formatDateForDisplay(dateStr) {
-            if (!dateStr) return "";
-            const date = new Date(dateStr);
+            if (!dateStr) return ""; const date = new Date(dateStr);
             return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
         }
 
         async function getFile(filename) {
-            try {
-                const timestamp = new Date().getTime();
-                const response = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}?t=${timestamp}`, { owner: REPO_OWNER, repo: REPO_NAME, path: filename });
-                return { content: JSON.parse(b64_to_utf8(response.data.content)), sha: response.data.sha };
-            } catch (e) { return { content: null, sha: null }; }
+            try { const t = new Date().getTime(); const r = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}?t=${t}`, { owner: REPO_OWNER, repo: REPO_NAME, path: filename }); return { content: JSON.parse(b64_to_utf8(r.data.content)), sha: r.data.sha }; } catch (e) { return { content: null, sha: null }; }
         }
-
         async function saveFile(filename, content, sha) {
             showSpinner();
-            if (!sha) {
-                try {
-                    const check = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, { owner: REPO_OWNER, repo: REPO_NAME, path: filename });
-                    sha = check.data.sha;
-                } catch (e) {}
-            }
-            const params = { owner: REPO_OWNER, repo: REPO_NAME, path: filename, message: "Update via Web App", content: utf8_to_b64(JSON.stringify(content, null, 2)) };
+            if (!sha) { try { const c = await octokit.request(`GET /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, { owner: REPO_OWNER, repo: REPO_NAME, path: filename }); sha = c.data.sha; } catch (e) {} }
+            const params = { owner: REPO_OWNER, repo: REPO_NAME, path: filename, message: "Update", content: utf8_to_b64(JSON.stringify(content, null, 2)) };
             if (sha) params.sha = sha;
-            try {
-                const response = await octokit.request(`PUT /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, params);
-                hideSpinner();
-                return response.data.content.sha;
-            } catch (e) {
-                hideSpinner();
-                const msg = e.response ? e.response.data.message : e.message;
-                showAlert("GitHub Save Error: " + msg);
-                throw e;
-            }
+            try { const r = await octokit.request(`PUT /repos/${REPO_OWNER}/${REPO_NAME}/contents/${filename}`, params); hideSpinner(); return r.data.content.sha; } catch (e) { hideSpinner(); showAlert("Save Error: " + e.message); throw e; }
         }
+        async function loadTeam() { const d = await getFile(TEAM_FILE); teamData = d.content || []; teamSha = d.sha; }
+        async function loadTypes() { const d = await getFile(TYPES_FILE); typeData = d.content || DEFAULT_TYPES; typeSha = d.sha; }
+        async function loadSchedule() { const d = await getFile(SCHEDULE_FILE); scheduleData = d.content || []; scheduleSha = d.sha; }
 
-        async function loadTeam() { const data = await getFile(TEAM_FILE); teamData = data.content || ["Carson", "Dave Miller"]; teamSha = data.sha; }
-        async function loadTypes() { const data = await getFile(TYPES_FILE); typeData = data.content || DEFAULT_TYPES; typeSha = data.sha; }
-        async function loadSchedule() { const data = await getFile(SCHEDULE_FILE); scheduleData = data.content || []; scheduleSha = data.sha; }
-
-        // --- CALENDAR LOGIC ---
         function initCalendar() {
             const calendarEl = document.getElementById('calendar');
             calendar = new FullCalendar.Calendar(calendarEl, {
-                initialView: 'dayGridMonth',
-                headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listMonth' },
-                events: scheduleData,
-                height: '80vh',
-                themeSystem: 'bootstrap5',
-                editable: true, droppable: true, eventResizableFromStart: true,
-                eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
+                initialView: 'dayGridMonth', headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listMonth' }, events: scheduleData, height: '80vh', themeSystem: 'bootstrap5', editable: true, droppable: true, eventResizableFromStart: true, eventTimeFormat: { hour: 'numeric', minute: '2-digit', meridiem: 'short' },
                 eventClick: function(info) { openEventModal(info.event); },
                 eventDrop: async function(info) { await handleDragResize(info.event); },
                 eventResize: async function(info) { await handleDragResize(info.event); },
@@ -559,34 +505,25 @@
                     return { html: `<div><span class="event-title">${arg.event.title}</span><span class="event-members">${members.join(", ")}</span></div>` };
                 }
             });
-            calendar.render();
-            refreshCalendarEvents();
+            calendar.render(); refreshCalendarEvents();
         }
 
         async function handleDragResize(event) {
             const index = scheduleData.findIndex(e => e.id === event.id);
             if (index > -1) {
-                if (event.allDay) {
-                    scheduleData[index].start = event.startStr; 
-                    scheduleData[index].end = event.endStr;
-                    scheduleData[index].allDay = true;
-                } else {
-                    scheduleData[index].start = event.start.toISOString();
-                    scheduleData[index].end = event.end.toISOString();
-                    scheduleData[index].allDay = false;
-                }
+                if (event.allDay) { scheduleData[index].start = event.startStr; scheduleData[index].end = event.endStr; scheduleData[index].allDay = true; } 
+                else { scheduleData[index].start = event.start.toISOString(); scheduleData[index].end = event.end.toISOString(); scheduleData[index].allDay = false; }
                 scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
             }
         }
 
-        // --- FILTER LOGIC ---
+        // --- FILTER (GRID RENDERER) ---
         function openFilterModal() {
             const list = document.getElementById('filter-list'); list.innerHTML = "";
             teamData.forEach(member => {
                 const isChecked = activeFilters.includes(member) ? "checked" : "";
-                const div = document.createElement("div");
-                div.className = "form-check mb-2";
-                div.innerHTML = `<input class="form-check-input filter-checkbox" type="checkbox" value="${member}" id="filter-${member}" ${isChecked}><label class="form-check-label" for="filter-${member}" style="margin-left: 10px; font-size: 1.1em;">${member}</label>`;
+                const div = document.createElement("div"); div.className = "grid-item form-check"; // Use grid-item class
+                div.innerHTML = `<label class="dropdown-item-checkbox text-white"><input class="form-check-input filter-checkbox me-2" type="checkbox" value="${member}" ${isChecked}>${member}</label>`;
                 list.appendChild(div);
             });
             new bootstrap.Modal(document.getElementById('filterModal')).show();
@@ -595,8 +532,7 @@
         function applyFilters() {
             const checkboxes = document.querySelectorAll('.filter-checkbox:checked');
             activeFilters = Array.from(checkboxes).map(cb => cb.value);
-            refreshCalendarEvents();
-            bootstrap.Modal.getInstance(document.getElementById('filterModal')).hide();
+            refreshCalendarEvents(); bootstrap.Modal.getInstance(document.getElementById('filterModal')).hide();
         }
         function refreshCalendarEvents() {
             if (!calendar) return;
@@ -605,31 +541,24 @@
                 if (members.length === 0) return true;
                 return members.some(m => activeFilters.includes(m));
             });
-            calendar.removeAllEvents();
-            calendar.addEventSource(visibleEvents);
+            calendar.removeAllEvents(); calendar.addEventSource(visibleEvents);
         }
 
-        // --- EVENT MODAL LOGIC ---
+        // --- EVENT MODAL (GRID RENDERER) ---
         function openEventModal(event = null) {
             const list = document.getElementById('member-checkbox-list'); list.innerHTML = "";
             teamData.forEach(member => {
-                const li = document.createElement("li");
+                const li = document.createElement("li"); li.style.listStyle = "none";
+                li.className = "grid-item"; // Grid styling
                 li.innerHTML = `<label class="dropdown-item-checkbox text-white"><input type="checkbox" class="form-check-input me-2 member-check" value="${member}">${member}</label>`;
                 list.appendChild(li);
             });
-            
             const typeSelect = document.getElementById('evt-type'); typeSelect.innerHTML = "";
-            typeData.forEach(type => {
-                const opt = document.createElement("option");
-                opt.value = type.color; opt.innerText = type.name; opt.setAttribute('data-name', type.name);
-                typeSelect.appendChild(opt);
-            });
+            typeData.forEach(type => { const opt = document.createElement("option"); opt.value = type.color; opt.innerText = type.name; opt.setAttribute('data-name', type.name); typeSelect.appendChild(opt); });
 
             if (event) {
-                // EDIT MODE
                 document.getElementById('eventModalTitle').innerText = "Edit Schedule Item";
-                document.getElementById('evt-id').value = event.id;
-                document.getElementById('evt-title').value = event.title;
+                document.getElementById('evt-id').value = event.id; document.getElementById('evt-title').value = event.title;
                 document.getElementById('btn-delete-event').style.display = "block";
                 
                 const typeName = event.extendedProps.type;
@@ -643,57 +572,28 @@
                 document.getElementById('all-day-switch').checked = isAllDay;
                 
                 let displayEnd = event.end;
-                if (isAllDay && displayEnd) {
-                    displayEnd = new Date(displayEnd);
-                    displayEnd.setDate(displayEnd.getDate() - 1);
-                }
+                if (isAllDay && displayEnd) { displayEnd = new Date(displayEnd); displayEnd.setDate(displayEnd.getDate() - 1); }
                 fpDate.setDate([event.start, displayEnd]);
 
-                // Set Time Picker Values if not all day
                 if (!isAllDay && event.start && event.end) {
-                    const s = event.start;
-                    const e = event.end;
-                    
-                    // Convert date objects to minutes since midnight
+                    const s = event.start; const e = event.end;
                     rangeStartIndex = timeOptions.findIndex(t => t.value === (s.getHours() * 60 + s.getMinutes()));
                     rangeEndIndex = timeOptions.findIndex(t => t.value === (e.getHours() * 60 + e.getMinutes()));
-                    
-                    // Highlight logic
                     resetTimeStyles();
-                    if(rangeStartIndex > -1) {
-                        document.querySelectorAll('.time-option')[rangeStartIndex].classList.add('selected');
-                    }
-                    if(rangeEndIndex > -1) {
-                        document.querySelectorAll('.time-option')[rangeEndIndex].classList.add('selected');
-                        handleTimeOptionHover(rangeEndIndex); // Trigger range highlight
-                    }
+                    if(rangeStartIndex > -1) document.querySelectorAll('.time-option')[rangeStartIndex].classList.add('selected');
+                    if(rangeEndIndex > -1) { document.querySelectorAll('.time-option')[rangeEndIndex].classList.add('selected'); handleTimeOptionHover(rangeEndIndex); }
                     updateTimeDisplay();
-                } else {
-                    rangeStartIndex = -1; rangeEndIndex = -1;
-                    document.getElementById('time-range-display').value = "";
-                    resetTimeStyles();
-                }
+                } else { rangeStartIndex = -1; rangeEndIndex = -1; document.getElementById('time-range-display').value = ""; resetTimeStyles(); }
                 toggleTimeInputs();
-
             } else {
-                // NEW MODE
                 document.getElementById('eventModalTitle').innerText = "New Schedule Item";
-                document.getElementById('evt-id').value = "";
-                document.getElementById('evt-title').value = "";
+                document.getElementById('evt-id').value = ""; document.getElementById('evt-title').value = "";
                 document.getElementById('btn-delete-event').style.display = "none";
-                document.getElementById('all-day-switch').checked = true;
-                toggleTimeInputs();
-                fpDate.clear();
-                
-                // Reset Time Picker
-                rangeStartIndex = -1; rangeEndIndex = -1;
-                document.getElementById('time-range-display').value = "";
-                resetTimeStyles();
+                document.getElementById('all-day-switch').checked = true; toggleTimeInputs(); fpDate.clear();
+                rangeStartIndex = -1; rangeEndIndex = -1; document.getElementById('time-range-display').value = ""; resetTimeStyles();
             }
-            
             document.querySelectorAll('.member-check').forEach(box => box.addEventListener('change', updateSelectedCount));
-            updateSelectedCount();
-            new bootstrap.Modal(document.getElementById('eventModal')).show();
+            updateSelectedCount(); new bootstrap.Modal(document.getElementById('eventModal')).show();
         }
 
         function updateSelectedCount() {
@@ -704,7 +604,6 @@
             else btn.innerText = `${checked.length} Members Selected`;
         }
 
-        // --- SAVE LOGIC ---
         async function prepareSaveEvent() {
             const id = document.getElementById('evt-id').value;
             const title = document.getElementById('evt-title').value;
@@ -714,144 +613,86 @@
             const isAllDay = document.getElementById('all-day-switch').checked;
             
             const selectedDates = fpDate.selectedDates;
-            if (!selectedDates || selectedDates.length < 2) return showAlert("Select Date Range (Start & End).");
+            if (!selectedDates || selectedDates.length < 2) return showAlert("Select Date Range.");
             
             let startISO, endISO;
-            const baseStartDate = selectedDates[0];
-            const baseEndDate = selectedDates[1];
+            const baseStartDate = selectedDates[0]; const baseEndDate = selectedDates[1];
 
             if (isAllDay) {
                 startISO = fpDate.formatDate(baseStartDate, "Y-m-d");
-                let endDateEx = new Date(baseEndDate);
-                endDateEx.setDate(endDateEx.getDate() + 1);
+                let endDateEx = new Date(baseEndDate); endDateEx.setDate(endDateEx.getDate() + 1);
                 endISO = endDateEx.toISOString().split('T')[0];
             } else {
                 if (rangeStartIndex === -1 || rangeEndIndex === -1) return showAlert("Select Time Range.");
-                
-                const startMins = timeOptions[rangeStartIndex].value;
-                const endMins = timeOptions[rangeEndIndex].value;
-
-                let startFull = new Date(baseStartDate);
-                startFull.setHours(Math.floor(startMins / 60), startMins % 60);
-                
-                let endFull = new Date(baseEndDate);
-                endFull.setHours(Math.floor(endMins / 60), endMins % 60);
-
-                startISO = startFull.toISOString();
-                endISO = endFull.toISOString();
+                const startMins = timeOptions[rangeStartIndex].value; const endMins = timeOptions[rangeEndIndex].value;
+                let startFull = new Date(baseStartDate); startFull.setHours(Math.floor(startMins / 60), startMins % 60);
+                let endFull = new Date(baseEndDate); endFull.setHours(Math.floor(endMins / 60), endMins % 60);
+                startISO = startFull.toISOString(); endISO = endFull.toISOString();
             }
 
             const checkboxes = document.querySelectorAll('.member-check:checked');
             const selectedMembers = Array.from(checkboxes).map(cb => cb.value);
-
             if (!title || selectedMembers.length === 0) return showAlert("Title and Members required.");
 
-            pendingSaveData = {
-                id: id || crypto.randomUUID(),
-                title: title, 
-                start: startISO, end: endISO, allDay: isAllDay,
-                backgroundColor: color, borderColor: color,
-                extendedProps: { type: typeName, members: selectedMembers }
-            };
+            pendingSaveData = { id: id || crypto.randomUUID(), title: title, start: startISO, end: endISO, allDay: isAllDay, backgroundColor: color, borderColor: color, extendedProps: { type: typeName, members: selectedMembers } };
 
-            // CONFLICT CHECK
-            const newStart = new Date(startISO);
-            const newEnd = new Date(endISO);
+            const newStart = new Date(startISO); const newEnd = new Date(endISO);
             let conflicts = [];
-
             for (let event of scheduleData) {
-                if (id && event.id === id) continue; 
-                if (!event.start || !event.end) continue;
-                
-                const evStart = new Date(event.start);
-                const evEnd = new Date(event.end);
-                
+                if (id && event.id === id) continue; if (!event.start || !event.end) continue;
+                const evStart = new Date(event.start); const evEnd = new Date(event.end);
                 if (newStart < evEnd && newEnd > evStart) {
                     const existingGroup = event.extendedProps.members || (event.resourceId ? [event.resourceId] : []);
                     const overlaps = selectedMembers.filter(m => existingGroup.includes(m));
                     if (overlaps.length > 0) {
                         overlaps.forEach(person => {
-                            const displayStart = formatDateForDisplay(event.start);
-                            const displayEnd = formatDateForDisplay(event.end);
-                            conflicts.push(`<b>${person}</b> is busy with "<i>${event.title}</i>" (${displayStart} - ${displayEnd})`);
+                            const displayStart = formatDateForDisplay(event.start); const displayEnd = formatDateForDisplay(event.end);
+                            conflicts.push(`<b>${person}</b> is busy with "<i>${event.title}</i>"`);
                         });
                     }
                 }
             }
-
             if (conflicts.length > 0) {
-                const conflictList = document.getElementById('conflict-list');
-                conflictList.innerHTML = "";
-                conflicts.forEach(c => {
-                    const li = document.createElement("li");
-                    li.className = "list-group-item bg-dark text-white border-secondary";
-                    li.innerHTML = c;
-                    conflictList.appendChild(li);
-                });
+                const conflictList = document.getElementById('conflict-list'); conflictList.innerHTML = "";
+                conflicts.forEach(c => { const li = document.createElement("li"); li.className = "list-group-item bg-dark text-white border-secondary"; li.innerHTML = c; conflictList.appendChild(li); });
                 new bootstrap.Modal(document.getElementById('conflictModal')).show();
-            } else {
-                finalizeSave();
-            }
+            } else { finalizeSave(); }
         }
 
         function confirmForceSave() { bootstrap.Modal.getInstance(document.getElementById('conflictModal')).hide(); finalizeSave(); }
-
         async function finalizeSave() {
             if (!pendingSaveData) return;
             const eventObj = pendingSaveData;
             const index = scheduleData.findIndex(e => e.id === eventObj.id);
-            if (index > -1) {
-                scheduleData[index] = eventObj;
-            } else {
-                scheduleData.push(eventObj);
-            }
-            refreshCalendarEvents();
-            bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
-            scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
-            pendingSaveData = null;
+            if (index > -1) { scheduleData[index] = eventObj; } else { scheduleData.push(eventObj); }
+            refreshCalendarEvents(); bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
+            scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha); pendingSaveData = null;
         }
-
-        function confirmDeleteEvent() { showConfirm("Are you sure you want to delete this item?", deleteEvent); }
+        function confirmDeleteEvent() { showConfirm("Delete this item?", deleteEvent); }
         async function deleteEvent() {
-            const id = document.getElementById('evt-id').value;
-            if (!id) return;
+            const id = document.getElementById('evt-id').value; if (!id) return;
             const index = scheduleData.findIndex(e => e.id === id);
-            if (index > -1) {
-                scheduleData.splice(index, 1);
-                refreshCalendarEvents();
-                bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
-                scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha);
-            }
+            if (index > -1) { scheduleData.splice(index, 1); refreshCalendarEvents(); bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide(); scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha); }
         }
 
-        // --- MANAGERS ---
+        // --- MANAGERS (GRID RENDERER) ---
         function openTeamManager() { cancelTeamEdit(); renderTeamList(); new bootstrap.Modal(document.getElementById('teamModal')).show(); }
         function renderTeamList() {
             const list = document.getElementById('team-list'); list.innerHTML = "";
             teamData.forEach((member, index) => {
-                const li = document.createElement("li");
-                li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
+                const li = document.createElement("div"); li.className = "grid-item"; // Grid styling
                 li.innerHTML = `<span style="font-size: 1.1em;">👤 ${member}</span> <div><button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditMember(${index})">✏️</button><button class="btn btn-sm btn-outline-danger btn-icon" onclick="confirmRemoveMember(${index})">🗑️</button></div>`;
                 list.appendChild(li);
             });
         }
-        function startEditMember(index) {
-            editingTeamIndex = index; document.getElementById('new-member-name').value = teamData[index];
-            document.getElementById('btn-team-submit').innerText = "Update"; document.getElementById('btn-team-submit').className = "btn btn-warning px-4"; document.getElementById('btn-team-cancel').style.display = "inline-block";
-        }
-        function cancelTeamEdit() {
-            editingTeamIndex = -1; document.getElementById('new-member-name').value = "";
-            document.getElementById('btn-team-submit').innerText = "Add"; document.getElementById('btn-team-submit').className = "btn btn-success px-4"; document.getElementById('btn-team-cancel').style.display = "none";
-        }
+        function startEditMember(index) { editingTeamIndex = index; document.getElementById('new-member-name').value = teamData[index]; document.getElementById('btn-team-submit').innerText = "Update"; document.getElementById('btn-team-submit').className = "btn btn-warning px-4"; document.getElementById('btn-team-cancel').style.display = "inline-block"; }
+        function cancelTeamEdit() { editingTeamIndex = -1; document.getElementById('new-member-name').value = ""; document.getElementById('btn-team-submit').innerText = "Add"; document.getElementById('btn-team-submit').className = "btn btn-success px-4"; document.getElementById('btn-team-cancel').style.display = "none"; }
         async function handleMemberSubmit() {
             const name = document.getElementById('new-member-name').value.trim(); if (!name) return;
             if (editingTeamIndex > -1) {
                 const oldName = teamData[editingTeamIndex]; teamData[editingTeamIndex] = name; teamData.sort();
                 let scheduleChanged = false;
-                scheduleData.forEach(ev => {
-                    let mems = (ev.extendedProps && ev.extendedProps.members) ? ev.extendedProps.members : [];
-                    if (mems.includes(oldName)) { ev.extendedProps.members = mems.map(m => m === oldName ? name : m); scheduleChanged = true; }
-                });
+                scheduleData.forEach(ev => { let mems = (ev.extendedProps && ev.extendedProps.members) ? ev.extendedProps.members : []; if (mems.includes(oldName)) { ev.extendedProps.members = mems.map(m => m === oldName ? name : m); scheduleChanged = true; } });
                 renderTeamList(); cancelTeamEdit(); teamSha = await saveFile(TEAM_FILE, teamData, teamSha);
                 if (scheduleChanged) { scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha); refreshCalendarEvents(); }
             } else { if (!teamData.includes(name)) { teamData.push(name); teamData.sort(); renderTeamList(); document.getElementById('new-member-name').value = ""; teamSha = await saveFile(TEAM_FILE, teamData, teamSha); } }
@@ -863,29 +704,19 @@
         function renderTypeList() {
             const list = document.getElementById('type-list'); list.innerHTML = "";
             typeData.forEach((type, index) => {
-                const li = document.createElement("li");
-                li.className = "list-group-item bg-dark text-white d-flex justify-content-between align-items-center border-secondary";
+                const li = document.createElement("div"); li.className = "grid-item"; // Grid styling
                 li.innerHTML = `<div class="d-flex align-items-center"><span class="color-swatch" style="background-color:${type.color};"></span><span style="font-size: 1.1em;">${type.name}</span></div><div><button class="btn btn-sm btn-outline-warning btn-icon" onclick="startEditType(${index})">✏️</button><button class="btn btn-sm btn-outline-danger btn-icon" onclick="confirmRemoveType(${index})">🗑️</button></div>`;
                 list.appendChild(li);
             });
         }
-        function startEditType(index) {
-            editingTypeIndex = index; const type = typeData[index];
-            document.getElementById('new-type-name').value = type.name; document.getElementById('new-type-color').value = type.color;
-            document.getElementById('btn-type-submit').innerText = "Update"; document.getElementById('btn-type-submit').className = "btn btn-warning px-4"; document.getElementById('btn-type-cancel').style.display = "inline-block";
-        }
-        function cancelTypeEdit() {
-            editingTypeIndex = -1; document.getElementById('new-type-name').value = ""; document.getElementById('new-type-color').value = "#0d6efd";
-            document.getElementById('btn-type-submit').innerText = "Add"; document.getElementById('btn-type-submit').className = "btn btn-success px-4"; document.getElementById('btn-type-cancel').style.display = "none";
-        }
+        function startEditType(index) { editingTypeIndex = index; const type = typeData[index]; document.getElementById('new-type-name').value = type.name; document.getElementById('new-type-color').value = type.color; document.getElementById('btn-type-submit').innerText = "Update"; document.getElementById('btn-type-submit').className = "btn btn-warning px-4"; document.getElementById('btn-type-cancel').style.display = "inline-block"; }
+        function cancelTypeEdit() { editingTypeIndex = -1; document.getElementById('new-type-name').value = ""; document.getElementById('new-type-color').value = "#0d6efd"; document.getElementById('btn-type-submit').innerText = "Add"; document.getElementById('btn-type-submit').className = "btn btn-success px-4"; document.getElementById('btn-type-cancel').style.display = "none"; }
         async function handleTypeSubmit() {
             const name = document.getElementById('new-type-name').value.trim(); const color = document.getElementById('new-type-color').value; if (!name) return;
             if (editingTypeIndex > -1) {
                 const oldType = typeData[editingTypeIndex]; const oldName = oldType.name; typeData[editingTypeIndex] = { name: name, color: color };
                 let scheduleChanged = false;
-                scheduleData.forEach(ev => {
-                    if (ev.extendedProps && ev.extendedProps.type === oldName) { ev.extendedProps.type = name; ev.backgroundColor = color; ev.borderColor = color; scheduleChanged = true; }
-                });
+                scheduleData.forEach(ev => { if (ev.extendedProps && ev.extendedProps.type === oldName) { ev.extendedProps.type = name; ev.backgroundColor = color; ev.borderColor = color; scheduleChanged = true; } });
                 renderTypeList(); cancelTypeEdit(); typeSha = await saveFile(TYPES_FILE, typeData, typeSha);
                 if (scheduleChanged) { scheduleSha = await saveFile(SCHEDULE_FILE, scheduleData, scheduleSha); refreshCalendarEvents(); }
             } else { if (!typeData.some(t => t.name === name)) { typeData.push({ name: name, color: color }); renderTypeList(); document.getElementById('new-type-name').value = ""; typeSha = await saveFile(TYPES_FILE, typeData, typeSha); } }
