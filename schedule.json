@@ -5,8 +5,8 @@
     "start": "2026-02-20",
     "end": "2026-02-24",
     "allDay": true,
-    "backgroundColor": "#fbff00",
-    "borderColor": "#fbff00",
+    "backgroundColor": "#0400ff",
+    "borderColor": "#0400ff",
     "extendedProps": {
       "type": "On-Site Startup",
       "members": [
@@ -22,8 +22,8 @@
     "start": "2026-02-18",
     "end": "2026-02-21",
     "allDay": true,
-    "backgroundColor": "#fbff00",
-    "borderColor": "#fbff00",
+    "backgroundColor": "#0400ff",
+    "borderColor": "#0400ff",
     "extendedProps": {
       "type": "On-Site Startup",
       "members": [
