@@ -14,5 +14,9 @@
   {
     "name": "In-Office",
     "color": "#ff8c00"
+  },
+  {
+    "name": "Private",
+    "color": "#ff0000"
   }
 ]
